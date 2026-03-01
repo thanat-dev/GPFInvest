@@ -1092,6 +1092,53 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
     <button class="btn btn-outline-primary rounded-pill px-4" onclick="loadMoreNews()" id="btn-load-more">โหลดข่าวเพิ่มเติม <i class="bi bi-chevron-down"></i></button>
 </div>
 
+<!-- ======= GPF ACADEMY ======= -->
+<h4 class="stitle" id="gpf-academy"><i class="bi bi-mortarboard-fill"></i> ศูนย์จัดระดับความรู้ กบข. (GPF Academy)</h4>
+<div class="row g-3 mb-4">
+    <!-- Level 101 -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:#f0fdf4; border-left:4px solid #16a34a !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;"><i class="bi bi-book"></i></div>
+                    <h6 class="fw-bold mb-0 text-success">ระดับ 101: มือใหม่หัดออม</h6>
+                </div>
+                <p class="small text-muted mb-2"><strong>กบข. คืออะไร?</strong> กองทุนบำเหน็จบำนาญข้าราชการ ช่วยให้คุณมีเงินใช้หลังเกษียณ</p>
+                <p class="small text-muted mb-2"><strong>เงินสะสม vs เงินสมทบ:</strong> คุณออม 3% รัฐแถมให้ 3% ฟรีๆ! ยิ่งออมเพิ่ม (สูงสุด 30%) ยิ่งลดหย่อนภาษีได้มาก</p>
+                <p class="small text-muted mb-0"><strong>ทำไมต้องเลือกแผน?</strong> แผนเริ่มต้น (แผนหลัก) มักมีผลตอบแทนต่ำกว่าอัตราเงินเฟ้อในระยะยาว การเลือกแผนให้เหมาะกับอายุจะช่วยให้เงินโตขึ้น</p>
+            </div>
+        </div>
+    </div>
+    <!-- Level 201 -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:#eff6ff; border-left:4px solid #2563eb !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;"><i class="bi bi-bar-chart-fill"></i></div>
+                    <h6 class="fw-bold mb-0 text-primary">ระดับ 201: รู้จัก 12 แผนลงทุน</h6>
+                </div>
+                <p class="small text-muted mb-2"><strong>ความเสี่ยงต่ำ:</strong> แผนตลาดเงิน, แผนตราสารหนี้ (เงินไม่หาย แต่โตช้า)</p>
+                <p class="small text-muted mb-2"><strong>ความเสี่ยงปานกลาง:</strong> แผนหลัก, แผนผสมหุ้น 35%, แผนสมดุลตามอายุ (ระบบปรับให้อัตโนมัติเมื่ออายุเยอะขึ้น)</p>
+                <p class="small text-muted mb-0"><strong>ความเสี่ยงสูง:</strong> แผนตราสารทุนไทย, แผนหุ้นต่างประเทศ, แผนทองคำ (ผันผวนสูง แต่มีโอกาสผลตอบแทนสูงในระยะยาว)</p>
+            </div>
+        </div>
+    </div>
+    <!-- Level 301 -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:#fefce8; border-left:4px solid #ca8a04 !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-warning text-dark rounded-circle d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;"><i class="bi bi-lightbulb-fill"></i></div>
+                    <h6 class="fw-bold mb-0 text-dark">ระดับ 301: กลยุทธ์จัดพอร์ต</h6>
+                </div>
+                <p class="small text-muted mb-2"><strong>การจับจังหวะ (Timing):</strong> ใช้เครื่องมือ "เจาะลึกตลาดอ้างอิง" เพื่อดูแนวโน้มว่าควรซื้อ/ขายในช่วงนี้</p>
+                <p class="small text-muted mb-2"><strong>แผนผสม (Customized Plan):</strong> ไม่ต้องเลือกแผนเดียว สามารถจับคู่ เช่น "หุ้นนอก 60% + หุ้นไทย 30% + ทอง 10%" ด้วยสัดส่วนตัวเองได้</p>
+                <p class="small text-muted mb-0"><strong>คำแนะนำที่สำคัญ:</strong> อย่าเปลี่ยนแผนบ่อยตามอารมณ์ตลาด ให้มองระยะยาว 3-5 ปีขึ้นไป</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ======= ROADMAP ======= -->
 <h4 class="stitle"><i class="bi bi-signpost-split-fill"></i> แผนการลงทุนสำหรับอนาคต</h4>
 <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -1406,6 +1453,91 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSetData();
     loadMoreNews();
 });
+</script>
+<!-- ======= AI CHATBOT WIDGET ======= -->
+<div id="ai-chat-widget">
+    <button id="chat-btn" class="btn btn-primary rounded-circle shadow-lg chat-bounce" onclick="toggleChat()" style="position:fixed; bottom:30px; right:30px; width:65px; height:65px; z-index:9999; border:none; background: linear-gradient(135deg, #2563eb, #1e40af);">
+        <i class="bi bi-robot text-white fs-3"></i>
+    </button>
+    <div id="chat-window" class="card shadow-lg border-0 rounded-4" style="display:none; position:fixed; bottom:105px; right:30px; width:360px; height:500px; z-index:9999; flex-direction:column; overflow:hidden;">
+        <div class="card-header text-white px-3 py-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #1e40af, #3b82f6);">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-robot fs-4"></i>
+                <div class="lh-1">
+                    <h6 class="mb-1 fw-bold text-white">น้อง กบข. AI</h6>
+                    <small class="text-white-50" style="font-size:0.75rem;">ผู้ช่วยส่วนตัว พร้อมให้คำแนะนำ</small>
+                </div>
+            </div>
+            <button class="btn btn-sm btn-link text-white p-0" onclick="toggleChat()">
+                <i class="bi bi-x-lg fs-5"></i>
+            </button>
+        </div>
+        <div id="chat-messages" class="card-body bg-light overflow-auto p-3" style="flex:1;">
+            <div class="d-flex gap-2 mb-3">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:30px;height:30px;"><i class="bi bi-robot small"></i></div>
+                <div class="bg-white p-2 px-3 rounded-3 shadow-sm text-dark align-self-start" style="max-width:85%; font-size:0.9rem;">
+                    สวัสดีครับ! ผมคือ น้อง AI ผู้ช่วย กบข. 😊 <br>คุณสามารถพิมพ์คำถาม หรือเลือกจากคำถามที่พบบ่อยด้านล่างนี้ได้เลยครับ
+                    <div class="mt-2 d-flex flex-column gap-1">
+                        <button class="btn btn-sm btn-outline-primary text-start rounded-pill" onclick="sendPrompt('ถ้าอายุ 30 ควรเลือกแผนไหน?')">อายุ 30 ควรเลือกแผนไหน?</button>
+                        <button class="btn btn-sm btn-outline-primary text-start rounded-pill" onclick="sendPrompt('กบข. ให้ผลตอบแทนเท่าไหร่?')">แผนผลตอบแทนสูงสุด 3 ปีย้อนหลังคือ?</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer bg-white p-2 border-top">
+            <div class="input-group">
+                <input type="text" id="chat-input" class="form-control rounded-pill border-0 bg-light px-3" placeholder="พิมพ์ข้อความที่นี่..." onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button class="btn text-primary bg-transparent border-0" onclick="sendMessage()"><i class="bi bi-send-fill fs-5"></i></button>
+            </div>
+            <div class="text-center mt-1">
+                 <small class="text-muted" style="font-size:0.6rem;">ระบบนี้มีโครงสร้าง UI พร้อมต่อ API หลังบ้านในอนาคต</small>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+.chat-bounce { animation: bounce 2s infinite; }
+@keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
+</style>
+<script>
+function toggleChat() {
+    const w = document.getElementById('chat-window');
+    w.style.display = w.style.display === 'none' ? 'flex' : 'none';
+    if(w.style.display === 'flex') document.getElementById('chat-input').focus();
+}
+function sendPrompt(text) {
+    document.getElementById('chat-input').value = text;
+    sendMessage();
+}
+function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if(!msg) return;
+    appendMessage(msg, 'user');
+    input.value = '';
+    setTimeout(() => {
+        let reply = "ขออภัยครับ ตอนนี้ผมเป็นเพียงระบบ Demo ที่มาพร้อม UI ให้เห็นภาพรวม พร้อมรอการเชื่อมต่อกับ AI API เต็มรูปแบบ (เช่น OpenAI หรือ Gemini) ในอนาคต แต่คุณสามารถอ่านข้อมูลพื้นฐานได้จาก <b>ศูนย์จัดระดับความรู้ กบข.</b> บนหน้าเว็บเลยครับ!";
+        if(msg.includes('30') || msg.includes('วัยรุ่น')) {
+            reply = "สำหรับช่วงอายุ 30 ปี ซึ่งมีระยะเวลาลงทุนอีกยาวนาน (25-30 ปี) แนะนำให้เน้น <b>แผนตราสารทุนไทย/ต่างประเทศ</b> หรือ <b>แผนเชิงรุก 65</b> ครับ เพราะสามารถก้าวข้ามความผันผวนระยะสั้นเพื่อเป้าหมายผลตอบแทนที่สูงขึ้นในระยะยาวได้ครับ 📈";
+        } else if(msg.includes('ผลตอบแทน') || msg.includes('สูงสุด')) {
+            reply = "จากข้อมูล 3 ปีย้อนหลังล่าสุด <b>แผนหุ้นต่างประเทศ 95% + แผนหลัก 5%</b> ให้ผลตอบแทนเฉลี่ยสูงที่สุดครับ (ประมาณ 14.03% ต่อปี) แต่ก็มีความเสี่ยงจากอัตราแลกเปลี่ยนและความผันผวนของตลาดโลกด้วยนะครับ";
+        }
+        appendMessage(reply, 'bot');
+    }, 800);
+}
+function appendMessage(text, sender) {
+    const chatMsgs = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = "d-flex gap-2 mb-3 " + (sender==='user' ? "justify-content-end" : "");
+    if(sender === 'user') {
+        div.innerHTML = `<div class="bg-primary text-white p-2 px-3 rounded-3 shadow-sm align-self-end" style="max-width:85%; font-size:0.9rem;">${text}</div>`;
+    } else {
+        div.innerHTML = `<div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:30px;height:30px;"><i class="bi bi-robot small"></i></div>
+            <div class="bg-white p-2 px-3 rounded-3 shadow-sm text-dark align-self-start" style="max-width:85%; font-size:0.9rem;">${text}</div>`;
+    }
+    chatMsgs.appendChild(div);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+}
 </script>
 </body>
 </html>
