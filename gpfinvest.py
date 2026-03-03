@@ -2714,35 +2714,70 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
       <span class="badge rounded-pill" style="background:#16a34a">🇹🇭 อัตราแลกเปลี่ยน (กระทบแผนต่างประเทศ)</span>
     </div>
 
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+    <div class="tradingview-widget-container" style="height: 650px; width: 100%;">
+      <div class="tradingview-widget-container__widget" style="height: calc(100% - 32px); width: 100%;"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-quotes.js" async>
       {
-        "symbols": [
-          {"proName":"CBOE:VIX", "title":"ความผันผวนตลาดโลก (กระทบแผนหุ้นต่างประเทศ/แผนสมดุลตามอายุ)"},
-          {"proName":"SP:SPX", "title":"แผนหุ้นต่างประเทศ (ตราสารทุนโลกพัฒนาแล้ว)"},
-          {"proName":"FOREXCOM:NSXUSD", "title":"แผนหุ้นต่างประเทศ (กลุ่มเทคโนโลยี)"},
-          {"proName":"TVC:DJI", "title":"แผนหุ้นต่างประเทศ"},
-          {"proName":"SET:SET", "title":"แผนหุ้นไทย"},
-          {"proName":"SET:SET50", "title":"แผนหุ้นไทย (หุ้นขนาดใหญ่)"},
-          {"proName":"SET:MAI", "title":"แผนหุ้นไทย (หุ้นขนาดกลาง-เล็ก)"},
-          {"proName":"NASDAQ:AAPL", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"NASDAQ:MSFT", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"NASDAQ:NVDA", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"NASDAQ:GOOGL", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"NASDAQ:AMZN", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"NASDAQ:META", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"NASDAQ:TSLA", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
-          {"proName":"OANDA:XAUUSD", "title":"แผนทองคำ"},
-          {"proName":"OANDA:USDTHB", "title":"อัตราแลกเปลี่ยน (กระทบทุกแผนต่างประเทศ)"},
-          {"proName":"TVC:US10Y", "title":"แผนตราสารหนี้ต่างประเทศ"},
-          {"proName":"TVC:TH10Y", "title":"แผนตราสารหนี้ไทย"}
+        "width": "100%",
+        "height": "100%",
+        "symbolsGroups": [
+          {
+            "name": "แผนหุ้นไทย & อสังหาริมทรัพย์ไทย",
+            "originalName": "Thai Assets",
+            "symbols": [
+              {"name": "SET:SET", "displayName": "SET Index"},
+              {"name": "SET:SET50", "displayName": "SET50"},
+              {"name": "SET:MAI", "displayName": "MAI Index"},
+              {"name": "SET:PFREIT", "displayName": "Thai REITs"}
+            ]
+          },
+          {
+            "name": "แผนหุ้นต่างประเทศ (DM/EM)",
+            "originalName": "Global Equities",
+            "symbols": [
+              {"name": "SP:SPX", "displayName": "S&P 500 (หุ้นโลก)"},
+              {"name": "FOREXCOM:NSXUSD", "displayName": "Nasdaq 100 (เทค)"},
+              {"name": "TVC:DE40", "displayName": "DAX (ยุโรป)"},
+              {"name": "TVC:UK100", "displayName": "FTSE 100 (อังกฤษ)"},
+              {"name": "TVC:KOSPI", "displayName": "KOSPI (เกาหลีใต้)"},
+              {"name": "NASDAQ:AAPL", "displayName": "Apple Inc."},
+              {"name": "NASDAQ:MSFT", "displayName": "Microsoft"},
+              {"name": "NASDAQ:NVDA", "displayName": "Nvidia"},
+              {"name": "NASDAQ:GOOGL", "displayName": "Alphabet (Google)"},
+              {"name": "NASDAQ:AMZN", "displayName": "Amazon"}
+            ]
+          },
+          {
+            "name": "แผนตราสารหนี้ (ไทย & ต่างประเทศ)",
+            "originalName": "Fixed Income",
+            "symbols": [
+              {"name": "TVC:TH10Y", "displayName": "ไทย 10Y Yield"},
+              {"name": "TVC:US10Y", "displayName": "สหรัฐฯ 10Y Yield"}
+            ]
+          },
+          {
+            "name": "แผนทองคำ & สินค้าโภคภัณฑ์",
+            "originalName": "Commodities",
+            "symbols": [
+              {"name": "OANDA:XAUUSD", "displayName": "Gold Spot (แผนทองคำ)"},
+              {"name": "TVC:USOIL", "displayName": "WTI Crude Oil"},
+              {"name": "TVC:UKOIL", "displayName": "Brent Crude Oil"}
+            ]
+          },
+          {
+            "name": "ความผันผวน & แนวโน้มตลาด",
+            "originalName": "Market Indicators",
+            "symbols": [
+              {"name": "CBOE:VIX", "displayName": "VIX (ความผันผวน)"},
+              {"name": "OANDA:USDTHB", "displayName": "ค่าเงินบาท (USD/THB)"}
+            ]
+          }
         ],
         "showSymbolLogo": true,
         "isTransparent": false,
-        "displayMode": "adaptive",
-        "locale": "en",
-        "colorTheme": "light"
+        "colorTheme": "light",
+        "locale": "th",
+        "backgroundColor": "#ffffff"
       }
       </script>
     </div>
@@ -2892,6 +2927,72 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
         </div>
       </div>
 
+      <!-- หุ้นยุโรป DAX -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#f3f4f6;border-bottom:2px solid #4b5563">
+            <span class="badge rounded-pill" style="background:#4b5563">แผนหุ้นต่างประเทศ</span>
+            <span class="fw-bold small">🇪🇺 DAX</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%;display:flex;align-items:center;justify-content:center;">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+            {
+            "symbol": "TVC:DE40",
+            "width": "100%",
+            "colorTheme": "light",
+            "isTransparent": true,
+            "locale": "th"
+          }
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- หุ้นเกาหลีใต้ KOSPI -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#eef2ff;border-bottom:2px solid #4338ca">
+            <span class="badge rounded-pill" style="background:#4338ca">แผนหุ้นต่างประเทศ</span>
+            <span class="fw-bold small">🇰🇷 KOSPI</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%;display:flex;align-items:center;justify-content:center;">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+            {
+            "symbol": "TVC:KOSPI",
+            "width": "100%",
+            "colorTheme": "light",
+            "isTransparent": true,
+            "locale": "th"
+          }
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thai REIT -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#fdf2f8;border-bottom:2px solid #db2777">
+            <span class="badge rounded-pill" style="background:#db2777">อสังหาริมทรัพย์ไทย</span>
+            <span class="fw-bold small">🏢 PF_REIT</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%;display:flex;align-items:center;justify-content:center;">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+            {
+            "symbol": "SET:PFREIT",
+            "width": "100%",
+            "colorTheme": "light",
+            "isTransparent": true,
+            "locale": "th"
+          }
+            </script>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -3003,6 +3104,84 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
         </div>
       </div>
 
+      <!-- DAX Index -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#f3f4f6;border-bottom:2px solid #4b5563">
+            <div class="fw-bold small">🇪🇺 DAX Index</div>
+          </div>
+          <div class="tradingview-widget-container p-1" style="height:350px;display:flex;align-items:center;justify-content:center;">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+            {
+            "symbol": "TVC:DE40",
+            "width": "100%",
+            "colorTheme": "light",
+            "isTransparent": true,
+            "locale": "th"
+            }
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- KOSPI Index -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#eef2ff;border-bottom:2px solid #4338ca">
+            <div class="fw-bold small">🇰🇷 KOSPI Index</div>
+          </div>
+          <div class="tradingview-widget-container p-1" style="height:350px;display:flex;align-items:center;justify-content:center;">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+            {
+            "symbol": "TVC:KOSPI",
+            "width": "100%",
+            "colorTheme": "light",
+            "isTransparent": true,
+            "locale": "th"
+            }
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- PF_REIT -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#fdf2f8;border-bottom:2px solid #db2777">
+            <div class="fw-bold small">🏢 PF_REIT</div>
+          </div>
+          <div class="tradingview-widget-container p-1" style="height:350px;display:flex;align-items:center;justify-content:center;">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+            {
+            "symbol": "SET:PFREIT",
+            "width": "100%",
+            "colorTheme": "light",
+            "isTransparent": true,
+            "locale": "th"
+            }
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- WTI Crude Oil -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#fff7ed;border-bottom:2px solid #ea580c">
+            <div class="fw-bold small">🛢️ WTI Crude Oil</div>
+          </div>
+          <div class="tradingview-widget-container p-1">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"TVC:USOIL","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
+            </script>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /row -->
 
     <!-- คำอธิบายการเชื่อมโยงสินทรัพย์ กบข. กับสัญญาณ -->
@@ -3014,6 +3193,7 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
             <li><span class="badge" style="background:#f59e0b">แผนทองคำ</span> : <strong>XAUUSD / GLD</strong> (Buy = แนวโน้มทองคำโลกเป็นขาขึ้น ส่งผลดีต่อแผนทองคำ)</li>
             <li><span class="badge" style="background:#1d4ed8">แผนหุ้นต่างประเทศ</span> : <strong>S&P 500, Nasdaq, Dow Jones</strong> (Buy = หุ้นบริษัทใหญ่ในระดับโลกมีทิศทางเติบโตดี)</li>
             <li><span class="badge" style="background:#334155">แผนหุ้นไทย</span> : <strong>SET, SET50</strong> (Buy = ตลาดหุ้นไทยแข็งแกร่ง มีโอกาสทำกำไรได้ดี)</li>
+            <li><span class="badge" style="background:#4b5563">ตราสารทุนยุโรป/เอเชีย</span> : <strong>DAX, KOSPI</strong> (แสดงแนวโน้มหุ้นภูมิภาคสำคัญ)</li>
             <li><span class="badge" style="background:#ef4444">แผนความเสี่ยงสูงต่างๆ</span> : <strong>VIX Index</strong> (ค่าสูง/เกิน 20 = ตลาดผันผวนหนัก นักลงทุนตื่นตระหนก ควรระวัง!)</li>
           </ul>
         </div>
@@ -3021,7 +3201,8 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
           <ul class="mb-0 small text-muted">
             <li><span class="badge" style="background:#16a34a">ค่าเงินบาท</span> : <strong>USD/THB</strong> (กราฟขึ้น = บาทอ่อน ส่งผลบวกต่อการแปลงมูลค่าแผนหุ้นและตราสารหนี้ต่างประเทศกลับมาเป็นบาท)</li>
             <li><span class="badge" style="background:#0284c7">แผนตราสารหนี้ ตปท.</span> : <strong>US 10Y Yield</strong> (Sell/กราฟร่วง = ราคาพันธบัตรจะปรับตัวขึ้น ส่งผลดีต่อกองทุนตราสารหนี้)</li>
-            <li><span class="badge" style="background:#9333ea">แผนตราสารหนี้ไทย</span> : <strong>Thai 10Y Yield</strong> (Sell/กราฟร่วง = ราคาพันธบัตรไทยปรับตัวสูงขึ้น)</li>
+            <li><span class="badge" style="background:#db2777">อสังหาริมทรัพย์ไทย</span> : <strong>PF_REIT</strong> (แนวโน้มกองทุนอสังหาริมทรัพย์และ REIT ของไทย)</li>
+            <li><span class="badge" style="background:#ea580c">สินค้าโภคภัณฑ์อื่นๆ</span> : <strong>WTI, Brent, Silver, Copper</strong> (ติดตามทิศทางราคาพลังงานและโลหะอุตสาหกรรมในตลาดโลก)</li>
           </ul>
         </div>
       </div>
