@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pyre-ignore-all-errors
 # -*- coding: utf-8 -*-
 """
 GPF Investment Analysis Web Application
@@ -12,11 +13,24 @@ PATCH NOTE: ลบ yfinance dependency ออก → ใช้ TradingView Widge
             แก้ปัญหากราฟและ Technical Sentiment ไม่แสดงผล
 """
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import Flask, render_template_string
 import datetime
 import itertools
 import urllib.request
 import xml.etree.ElementTree as ET
+import os
+try:
+    import google.generativeai as genai
+    GENAI_AVAILABLE = True
+except ImportError:
+    genai = None
+    GENAI_AVAILABLE = False
 
 app = Flask(__name__)
 
@@ -502,6 +516,1660 @@ def api_news():
     })
 
 
+# =========================================================================
+# AI-Powered Market Outlook (Phase 1)
+# =========================================================================
+AI_OUTLOOK_CACHE = {"data": None, "last_fetch": None}
+
+def generate_ai_outlook():
+    global AI_OUTLOOK_CACHE, NEWS_CACHE
+    now = datetime.datetime.now()
+    if AI_OUTLOOK_CACHE["data"] and AI_OUTLOOK_CACHE["last_fetch"]:
+        # Cache for 6 hours
+        if (now - AI_OUTLOOK_CACHE["last_fetch"]).total_seconds() < 21600:
+            return AI_OUTLOOK_CACHE["data"]
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        # Fallback to static if no API key or genai not installed
+        return MARKET_OUTLOOK
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Get latest news for context
+        if not NEWS_CACHE["data"]:
+            NEWS_CACHE["data"] = fetch_all_news()
+            NEWS_CACHE["last_fetch"] = now
+            
+        news_items = NEWS_CACHE["data"]
+            
+        recent_news = news_items[:40] # Top 40 recent news
+        news_titles = "\n".join([f"- {n['title']} ({n['date']})" for n in recent_news])
+        
+        prompt = f"""
+คุณเป็นผู้เชี่ยวชาญด้านการลงทุนของ กองทุนบำเหน็จบำนาญข้าราชการ (กบข.)
+จงสรุปสถานการณ์ตลาดและการลงทุนจากหัวข้อข่าวล่าสุดต่อไปนี้ ให้อยู่ในรูปแบบ JSON เท่านั้น:
+
+ข่าวล่าสุดที่จะใช้วิเคราะห์:
+{news_titles}
+
+รูปแบบ JSON ที่ต้องการ (ห้ามมี Markdown หรือข้อความอื่นปน):
+{{
+  "date": "ระบุชื่อเดือนปัจจุบัน พ.ศ. ปัจจุบัน (เช่น มีนาคม 2569)",
+  "global_economy": "สรุปสถานการณ์เศรษฐกิจโลกใน 1-2 ประโยค",
+  "thai_economy": "สรุปสถานการณ์เศรษฐกิจไทย ดัชนีหลักทรัพย์ไทย ใน 1-2 ประโยค",
+  "gold_view": "ทิศทางราคาทองคำจากข่าว",
+  "strategy": "คำแนะนำกลยุทธ์การลงทุน กบข. ให้เหมาะกับสถานการณ์นี้",
+  "academy_tip": "คำแนะนำให้ความรู้การลงทุนสั้นๆ (Educational Tip) ที่เชื่อมโยงกับสถานการณ์ตลาดปัจจุบัน เช่น อธิบายว่าทำไมสินทรัพย์ประเภทหนึ่งถึงขึ้น/ลง เพื่อให้ความรู้สมาชิก",
+  "long_term_insight": "มุมมองการลงทุนระยะยาว (3-5 ปีขึ้นไป) ที่ควรรักษาไว้แม้ตลาดระยะสั้นจะผันผวน เพื่อเสริมวินัยการลงทุน",
+  "fear_greed_score": "ตัวเลข 0-100 ประเมินความกลัวและความโลภของตลาดจากข่าว (0=Extreme Fear, 100=Extreme Greed)"
+}}
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        # Clean up JSON if it has markdown block
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+        
+        ai_data = _json.loads(text)
+        ai_data['is_ai'] = True 
+        
+        AI_OUTLOOK_CACHE["data"] = ai_data
+        AI_OUTLOOK_CACHE["last_fetch"] = now
+        return ai_data
+        
+    except Exception as e:
+        print(f"AI Generation Error: {e}")
+        return MARKET_OUTLOOK
+
+@app.route("/api/outlook")
+def api_outlook():
+    from flask import jsonify
+    outlook = generate_ai_outlook()
+    return jsonify(outlook)
+
+
+# =========================================================================
+# Market Timing & Momentum Indicators (Phase 2)
+# =========================================================================
+MOMENTUM_CACHE = {"data": {}, "last_fetch": None}
+
+def get_asset_momentum():
+    """
+    Returns momentum scores for assets.
+    Note: yfinance dependency removed - using neutral fallback values.
+    Real-time data is displayed via TradingView widgets on client-side.
+    """
+    global MOMENTUM_CACHE
+    now = datetime.datetime.now()
+    if MOMENTUM_CACHE["data"] and MOMENTUM_CACHE["last_fetch"]:
+        # Cache for 2 hours
+        if (now - MOMENTUM_CACHE["last_fetch"]).total_seconds() < 7200:
+            return MOMENTUM_CACHE["data"]
+
+    # Fallback: return neutral momentum scores
+    # Real momentum indicators are shown via TradingView widgets (client-side)
+    momentum_scores = {
+        "equity_intl": 0.0,
+        "gold": 0.0,
+        "equity_thai": 0.0,
+        "reit_thai": 0.0
+    }
+
+    MOMENTUM_CACHE["data"] = momentum_scores
+    MOMENTUM_CACHE["last_fetch"] = now
+
+    return momentum_scores
+
+
+# =========================================================================
+# Phase 5 & 6: Smart Chatbot & What-If Simulator
+# =========================================================================
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    from flask import request, jsonify
+    data = request.json
+    user_message = data.get("message", "")
+    history = data.get("history", [])
+    
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์ AI Chatbot จำเป็นต้องติดตั้ง google-generativeai ก่อนครับ (pip install google-generativeai)"})
+    if not API_KEY:
+        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์ AI Chatbot จำเป็นต้องเชื่อมต่อกับ API ก่อนครับ (กรุณาตั้งค่า GEMINI_API_KEY)"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        
+        formatted_history = []
+        for h in history:
+            formatted_history.append({
+                "role": h["role"],
+                "parts": [h["parts"]]
+            })
+
+        system_instruction = f"""
+คุณคือ "น้อง กบข. AI" ผู้ช่วยส่วนตัวและที่ปรึกษาด้านการลงทุนของ กองทุนบำเหน็จบำนาญข้าราชการ (กบข.)
+ตอบคำถามด้วยความสุภาพ เป็นกันเอง และอ้างอิงข้อมูลของ กบข. (GPF) เป็นหลัก ใช้ภาษาไทยที่เข้าใจง่าย มี Emoticon ประกอบบ้าง
+
+ข้อมูลปัจจุบันของผู้ใช้ (เพื่อให้บริการแบบ Personalized):
+- ผู้ใช้ถือแผนการลงทุน: {', '.join([h['plan'] for h in USER_PORTFOLIO['holdings']])}
+- ยอดเงินฝากสะสมรวม: {USER_PORTFOLIO['total']:,.2f} บาท
+- ผลตอบแทนปัจจุบัน: กำไร {USER_PORTFOLIO['profit']:,.2f} บาท
+- สภาพตลาดปัจจุบัน (ใช้เพื่ออ้างอิงเหตุการณ์รายวัน): 
+  - เศรษฐกิจโลก: {MARKET_OUTLOOK['global_economy']}
+  - เศรษฐกิจไทย: {MARKET_OUTLOOK['thai_economy']}
+  - ทองคำ: {MARKET_OUTLOOK['gold_view']}
+        
+ถ้าผู้ใช้ถามเกี่ยวกับพอร์ตของตัวเอง ให้วิเคราะห์หรือตอบอ้างอิงจากข้อมูลด้านบนนี้
+ถ้าผู้ใช้ขอคำแนะนำการลงทุน ให้สอดแทรกความรู้เรื่องวินัยการออมและการลงทุนระยะยาวเสมอ
+"""
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=system_instruction
+        )
+        
+        chat = model.start_chat(history=formatted_history)
+        response = chat.send_message(user_message)
+        
+        return jsonify({"reply": response.text})
+
+    except Exception as e:
+        print(f"Chatbot Error: {e}")
+        return jsonify({"reply": "ขออภัยครับ ระบบประมวลผล AI ของน้อง กบข. มีปัญหาขัดข้องชั่วคราว ลองใหม่อีกครั้งนะครับ 🙏"})
+
+
+@app.route("/api/simulate", methods=["POST"])
+def api_simulate():
+    from flask import request, jsonify
+    data = request.json
+    scenario = data.get("scenario", "")
+    
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"error": "google-generativeai not installed"})
+    if not API_KEY:
+        return jsonify({"error": "No API Key"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        prompt = f"""
+วิเคราะห์สถานการณ์สมมติทางเศรษฐกิจต่อไปนี้: "{scenario}"
+และประเมินผลกระทบที่อาจเกิดขึ้นกับสินทรัพย์ 3 ประเภท (หุ้นต่างประเทศ, หุ้นไทย, ทองคำ)
+ให้ตอบเป็น JSON เท่านั้น โดยระบุตัวเลขประเมินผลกระทบเป็นเปอร์เซ็นต์ (% impact) จาก -100 ถึง +100
+ตัวอย่าง: หุ้นตกรุนแรงอาจจะเป็น -20, ทองคำขึ้นอาจจะเป็น +5
+
+รูปแบบ JSON:
+{{
+  "equity_intl_impact": 0.0,
+  "equity_thai_impact": 0.0,
+  "gold_impact": 0.0,
+  "reasoning": "อธิบายเหตุผลสั้นๆ 1 ประโยค"
+}}
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+            
+        impact_data = _json.loads(text.strip())
+        
+        # Calculate specific impact on Current Portfolio (75% intl, 25% gold)
+        p_intl = 0.7507
+        p_gold = 0.2493
+        total_impact = (p_intl * impact_data.get("equity_intl_impact", 0)) + (p_gold * impact_data.get("gold_impact", 0))
+        
+        est_loss = (USER_PORTFOLIO['total'] * (total_impact / 100))
+        new_balance = USER_PORTFOLIO['total'] + est_loss
+        
+        return jsonify({
+            "scenario": scenario,
+            "total_impact_pct": round(total_impact, 2),
+            "est_loss_thb": round(est_loss, 2),
+            "new_balance_thb": round(new_balance, 2),
+            "reasoning": impact_data.get("reasoning", "")
+        })
+
+    except Exception as e:
+        print(f"Simulation Error: {e}")
+        return jsonify({"error": "Simulation failed"})
+
+
+# =========================================================================
+# GPF Knowledge Base for RAG (Retrieval-Augmented Generation)
+# =========================================================================
+GPF_KNOWLEDGE_BASE = {
+    "general": """
+กองทุนบำเหน็จบำนาญข้าราชการ (กบข.) คือกองทุนที่จัดตั้งขึ้นตาม พ.ร.บ. กองทุนบำเหน็จบำนาญข้าราชการ พ.ศ. 2539
+เพื่อเป็นหลักประกันการจ่ายบำเหน็จบำนาญและให้ประโยชน์ตอบแทนการรับราชการแก่ข้าราชการเมื่อออกจากราชการ
+สมาชิก กบข. ประกอบด้วยข้าราชการพลเรือน ข้าราชการครู ข้าราชการตำรวจ ข้าราชการทหาร และข้าราชการอื่นๆ
+""",
+    "investment_plans": """
+กบข. มีแผนการลงทุนให้เลือก 10 แผน:
+1. แผนเงินฝากและตราสารหนี้ระยะสั้น (ความเสี่ยงต่ำมาก ระดับ 1)
+2. แผนตราสารหนี้ (ความเสี่ยงปานกลาง ระดับ 4)
+3. แผนตราสารหนี้ต่างประเทศ (ความเสี่ยงปานกลาง-สูง ระดับ 5)
+4. แผนทองคำ (ความเสี่ยงปานกลาง-สูง ระดับ 5)
+5. แผนหุ้นไทย (ความเสี่ยงสูง ระดับ 6)
+6. แผน Thai ESG (ความเสี่ยงสูง ระดับ 6)
+7. แผนหุ้นต่างประเทศ (ความเสี่ยงสูง ระดับ 6)
+8. แผนกองทุนอสังหาริมทรัพย์ไทย (ความเสี่ยงสูง ระดับ 6)
+9. แผนสมดุลตามอายุ (Life Path) - ปรับสัดส่วนอัตโนมัติตามอายุ
+10. แผนหลัก (Default Plan) - กระจายลงทุนหลายสินทรัพย์
+""",
+    "contribution": """
+อัตราเงินสะสม กบข.:
+- ข้าราชการสะสม: 3% ของเงินเดือน (ส่งเพิ่มได้สูงสุด 15%)
+- รัฐสมทบ: 3% ของเงินเดือน
+- รัฐชดเชย: 2% ของเงินเดือน
+- เงินประเดิม: รัฐจ่ายให้ครั้งเดียวตามอายุราชการ
+รวมแล้วรัฐช่วยออมให้ 5% + เงินประเดิม
+""",
+    "withdrawal": """
+การขอรับเงินคืน กบข.:
+- เกษียณอายุ: รับเงินก้อน + บำนาญรายเดือน หรือเลือกรับแบบผสม
+- ลาออก/โอนย้าย: รับเงินสะสม + ผลประโยชน์ (ส่วนรัฐสมทบได้ตามเงื่อนไข)
+- ทุพพลภาพ/เสียชีวิต: รับเงินทั้งหมดตามสิทธิ
+""",
+    "tax_benefits": """
+สิทธิประโยชน์ทางภาษี:
+- เงินสะสมส่วนเพิ่ม (สูงสุด 15%) สามารถนำไปลดหย่อนภาษีได้
+- รวมกับ RMF, SSF, กองทุนสำรองเลี้ยงชีพ ไม่เกิน 500,000 บาท/ปี
+- เงินที่ได้รับคืนเมื่อเกษียณ ยกเว้นภาษีตามเงื่อนไข
+""",
+    "risk_assessment": """
+การประเมินความเสี่ยง:
+- ทำแบบประเมินผ่าน My GPF App หรือเว็บไซต์ กบข.
+- แบ่งระดับความเสี่ยง: ต่ำ, ปานกลาง, สูง
+- ผลประเมินใช้ได้ 2 ปี ต้องทำใหม่เมื่อหมดอายุ
+- เลือกแผนลงทุนได้ตามระดับความเสี่ยงที่ประเมินได้หรือต่ำกว่า
+""",
+    "plan_change": """
+การเปลี่ยนแผนการลงทุน:
+- เปลี่ยนได้ 12 ครั้ง/ปี (นับตามปีปฏิทิน)
+- มีผลวันที่ 1 ของเดือนถัดไป
+- สามารถแบ่งสัดส่วนลงทุนหลายแผนได้ (รวม 100%)
+- แนะนำให้ทบทวนแผนอย่างน้อยปีละ 1 ครั้ง
+"""
+}
+
+def get_relevant_knowledge(query):
+    """Simple keyword-based retrieval for RAG"""
+    query_lower = query.lower()
+    relevant = []
+
+    keyword_map = {
+        "general": ["กบข", "คืออะไร", "ประวัติ", "สมาชิก", "ข้าราชการ"],
+        "investment_plans": ["แผน", "ลงทุน", "กองทุน", "ตราสารหนี้", "หุ้น", "ทองคำ", "อสังหาริมทรัพย์", "life path", "สมดุล"],
+        "contribution": ["สะสม", "สมทบ", "เงินเดือน", "ออม", "ประเดิม", "เปอร์เซ็นต์", "%"],
+        "withdrawal": ["รับเงิน", "ถอน", "เกษียณ", "ลาออก", "บำนาญ", "บำเหน็จ"],
+        "tax_benefits": ["ภาษี", "ลดหย่อน", "สิทธิประโยชน์", "rmf", "ssf"],
+        "risk_assessment": ["ความเสี่ยง", "ประเมิน", "แบบประเมิน", "ระดับ"],
+        "plan_change": ["เปลี่ยนแผน", "สับเปลี่ยน", "สัดส่วน", "ครั้ง"]
+    }
+
+    for key, keywords in keyword_map.items():
+        if any(kw in query_lower for kw in keywords):
+            relevant.append(GPF_KNOWLEDGE_BASE[key])
+
+    if not relevant:
+        relevant = [GPF_KNOWLEDGE_BASE["general"], GPF_KNOWLEDGE_BASE["investment_plans"]]
+
+    return "\n\n".join(relevant[:3])
+
+
+# =========================================================================
+# Phase 8: Automated Data Pipeline (Factsheet OCR)
+# =========================================================================
+@app.route("/api/admin/update_funds", methods=["POST"])
+def api_admin_update_funds():
+    from flask import request, jsonify
+    import tempfile
+    
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE or not API_KEY:
+        return jsonify({"error": "Google Generative AI not available or API Key missing"})
+
+    if 'factsheet' not in request.files:
+        return jsonify({"error": "No file uploaded. Please provide a GPF Factsheet PDF."})
+        
+    file = request.files['factsheet']
+    if file.filename == '':
+        return jsonify({"error": "Empty filename."})
+        
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Save temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            file.save(temp_pdf.name)
+            temp_pdf_path = temp_pdf.name
+            
+        with open(temp_pdf_path, "rb") as f:
+            pdf_data = f.read()
+            
+        prompt = '''
+        คุณคือ AI อ่านเอกสาร Factsheet ของ กบข. หน้าที่ของคุณคือสกัดข้อมูล 'ผลตอบแทนล่าสุด' และ 'ผลตอบแทนปี 2567' 
+        ของแผนการลงทุนทั้ง 12 แผน ให้ตอบเป็น JSON array ของ object ที่มีโครงสร้างดังนี้:
+        [
+          {"plan_id": "deposit_short", "latest_return": 1.25, "annual_return": 1.50},
+          ...
+        ]
+        ตอบเฉพาะ JSON เท่านั้น ห้ามมีคำอธิบายอื่น
+        '''
+        
+        response = model.generate_content([
+            {'mime_type': 'application/pdf', 'data': pdf_data},
+            prompt
+        ])
+        
+        # Clean up temp file
+        if os.path.exists(temp_pdf_path):
+            os.remove(temp_pdf_path)
+        
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+            
+        extracted_data = _json.loads(text.strip())
+        
+        return jsonify({
+            "success": True, 
+            "message": "Factsheet processed successfully. (Mock dictionary update)",
+            "extracted_data": extracted_data
+        })
+        
+    except Exception as e:
+        print(f"Factsheet OCR Error: {e}")
+        return jsonify({"error": "Failed to process the factsheet."})
+
+
+# =========================================================================
+# Phase 2 & 9: AI-Powered Personalized Portfolio Allocation & Goal
+# =========================================================================
+@app.route("/api/ai/portfolio-advice", methods=["POST"])
+def api_portfolio_advice():
+    from flask import request, jsonify
+    data = request.json
+
+    age = data.get("age", 35)
+    years_to_retire = data.get("years_to_retire", 25)
+    risk_tolerance = data.get("risk_tolerance", "medium")  # low, medium, high
+    monthly_salary = data.get("monthly_salary", 30000)
+    current_savings = data.get("current_savings", 0)
+    investment_goal = data.get("investment_goal", "retirement")
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"error": "google-generativeai not installed"})
+    if not API_KEY:
+        return jsonify({"error": "No API Key"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Get current fund data for context
+        fund_summary = "\n".join([
+            f"- {f['name_th']}: ผลตอบแทน 3 ปี {f['avg_3y'] or 'N/A'}%, ความเสี่ยงระดับ {f['risk_level']}"
+            for f in FUNDS
+        ])
+
+        prompt = f"""
+คุณเป็นที่ปรึกษาการลงทุน กบข. ให้คำแนะนำ Asset Allocation ที่เหมาะสม
+
+ข้อมูลผู้ใช้:
+- อายุ: {age} ปี
+- ปีที่จะเกษียณ: {years_to_retire} ปี
+- ระดับความเสี่ยงที่รับได้: {risk_tolerance}
+- เงินเดือน: {monthly_salary:,} บาท
+- เงินออมปัจจุบัน: {current_savings:,} บาท
+- เป้าหมาย: {investment_goal}
+
+แผนการลงทุน กบข. ที่มี:
+{fund_summary}
+
+ให้ตอบเป็น JSON เท่านั้น:
+{{
+  "recommended_allocation": [
+    {{"plan_id": "equity_intl", "plan_name": "แผนหุ้นต่างประเทศ", "percentage": 40, "reason": "เหตุผลสั้นๆ"}},
+    {{"plan_id": "gold", "plan_name": "แผนทองคำ", "percentage": 20, "reason": "เหตุผลสั้นๆ"}},
+    {{"plan_id": "fixed_income", "plan_name": "แผนตราสารหนี้", "percentage": 40, "reason": "เหตุผลสั้นๆ"}}
+  ],
+  "risk_score": 6,
+  "expected_return_yearly": 5.5,
+  "summary": "สรุปคำแนะนำ 2-3 ประโยค",
+  "key_advice": ["คำแนะนำ 1", "คำแนะนำ 2", "คำแนะนำ 3"],
+  "rebalance_frequency": "ปีละ 1 ครั้ง"
+}}
+
+หมายเหตุ: percentage รวมกันต้องเท่ากับ 100
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        advice = _json.loads(text.strip())
+        advice["user_profile"] = {
+            "age": age,
+            "years_to_retire": years_to_retire,
+            "risk_tolerance": risk_tolerance
+        }
+
+        return jsonify(advice)
+
+    except Exception as e:
+        print(f"Portfolio Advice Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+# =========================================================================
+# Phase 2: Rebalancing Alert System
+# =========================================================================
+@app.route("/api/ai/rebalance-check", methods=["POST"])
+def api_rebalance_check():
+    from flask import request, jsonify
+    data = request.json
+
+    # Current allocation from user or use default portfolio
+    current_allocation = data.get("current_allocation", USER_PORTFOLIO.get("holdings", []))
+    target_allocation = data.get("target_allocation", None)
+    threshold_pct = data.get("threshold", 5)  # Default 5% drift threshold
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"error": "google-generativeai not installed"})
+    if not API_KEY:
+        # Return rule-based analysis without AI
+        alerts = []
+        for holding in current_allocation:
+            if target_allocation:
+                target = next((t for t in target_allocation if t["id"] == holding["id"]), None)
+                if target:
+                    drift = abs(holding["pct"] - target["pct"])
+                    if drift > threshold_pct:
+                        alerts.append({
+                            "plan": holding["plan"],
+                            "current_pct": holding["pct"],
+                            "target_pct": target["pct"],
+                            "drift": round(drift, 2),
+                            "action": "ลด" if holding["pct"] > target["pct"] else "เพิ่ม"
+                        })
+        return jsonify({
+            "needs_rebalance": len(alerts) > 0,
+            "alerts": alerts,
+            "ai_analysis": None
+        })
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        allocation_str = "\n".join([
+            f"- {h['plan']}: {h['pct']}% (มูลค่า {h.get('value', 0):,.2f} บาท)"
+            for h in current_allocation
+        ])
+
+        prompt = f"""
+วิเคราะห์พอร์ตการลงทุน กบข. และแนะนำการ Rebalance
+
+พอร์ตปัจจุบัน:
+{allocation_str}
+
+เกณฑ์ Drift ที่ยอมรับได้: {threshold_pct}%
+
+ตอบเป็น JSON:
+{{
+  "needs_rebalance": true/false,
+  "overall_risk_level": "ต่ำ/ปานกลาง/สูง",
+  "concentration_risk": "มี/ไม่มี ความเสี่ยงกระจุกตัว",
+  "alerts": [
+    {{"plan": "ชื่อแผน", "issue": "ปัญหา", "suggestion": "แนวทางแก้ไข"}}
+  ],
+  "rebalance_actions": [
+    {{"from_plan": "แผน A", "to_plan": "แผน B", "amount_pct": 10, "reason": "เหตุผล"}}
+  ],
+  "market_timing_note": "ความเห็นเรื่องจังหวะตลาดในการ rebalance"
+}}
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        analysis = _json.loads(text.strip())
+        return jsonify(analysis)
+
+    except Exception as e:
+        print(f"Rebalance Check Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+# =========================================================================
+# Phase 3: Advanced Scenario Analysis
+# =========================================================================
+SCENARIO_TEMPLATES = {
+    "recession": "เศรษฐกิจโลกเข้าสู่ภาวะถดถอย (Recession) GDP ติดลบ 2%",
+    "inflation": "อัตราเงินเฟ้อพุ่งสูงขึ้นเกิน 8% ธนาคารกลางขึ้นดอกเบี้ยเร่งด่วน",
+    "war": "เกิดสงครามในภูมิภาคตะวันออกกลาง ราคาน้ำมันพุ่ง 50%",
+    "tech_crash": "ฟองสบู่หุ้นเทคโนโลยีแตก Nasdaq ร่วง 30%",
+    "china_crisis": "วิกฤตอสังหาริมทรัพย์จีนลุกลาม ส่งผลกระทบเศรษฐกิจเอเชีย",
+    "fed_pivot": "Fed ประกาศลดดอกเบี้ยเร็วกว่าคาด 1.5% ภายในปีนี้",
+    "gold_surge": "ราคาทองคำพุ่งทะลุ $3,000/oz จากความไม่แน่นอนทางภูมิรัฐศาสตร์",
+    "baht_weak": "เงินบาทอ่อนค่าแตะ 40 บาท/ดอลลาร์"
+}
+
+@app.route("/api/ai/scenario-analysis", methods=["POST"])
+def api_scenario_analysis():
+    from flask import request, jsonify
+    data = request.json
+
+    scenario_type = data.get("scenario_type", "custom")
+    custom_scenario = data.get("custom_scenario", "")
+    portfolio = data.get("portfolio", USER_PORTFOLIO)
+    time_horizon = data.get("time_horizon", "6 เดือน")
+
+    # Get scenario description
+    if scenario_type != "custom" and scenario_type in SCENARIO_TEMPLATES:
+        scenario = SCENARIO_TEMPLATES[scenario_type]
+    else:
+        scenario = custom_scenario
+
+    if not scenario:
+        return jsonify({"error": "กรุณาระบุสถานการณ์"})
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"error": "google-generativeai not installed"})
+    if not API_KEY:
+        return jsonify({"error": "No API Key"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        holdings_str = "\n".join([
+            f"- {h['plan']}: {h['pct']}%"
+            for h in portfolio.get("holdings", [])
+        ])
+
+        prompt = f"""
+วิเคราะห์ผลกระทบจากสถานการณ์สมมติต่อพอร์ตการลงทุน กบข. อย่างละเอียด
+
+สถานการณ์: {scenario}
+ระยะเวลาวิเคราะห์: {time_horizon}
+
+พอร์ตปัจจุบัน (มูลค่ารวม {portfolio.get('total', 0):,.2f} บาท):
+{holdings_str}
+
+ตอบเป็น JSON:
+{{
+  "scenario_summary": "สรุปสถานการณ์ 1-2 ประโยค",
+  "probability": "ความน่าจะเป็นที่เกิดขึ้น (ต่ำ/ปานกลาง/สูง)",
+  "impact_by_asset": [
+    {{"asset": "หุ้นต่างประเทศ", "impact_pct": -15, "explanation": "อธิบาย"}},
+    {{"asset": "ทองคำ", "impact_pct": 10, "explanation": "อธิบาย"}},
+    {{"asset": "ตราสารหนี้ไทย", "impact_pct": -2, "explanation": "อธิบาย"}}
+  ],
+  "portfolio_impact": {{
+    "total_impact_pct": -8.5,
+    "estimated_loss_thb": 24000,
+    "worst_case_pct": -15,
+    "best_case_pct": -3
+  }},
+  "protective_actions": [
+    {{"action": "ลดสัดส่วนหุ้นต่างประเทศ", "to_pct": 50, "timing": "ทันที"}},
+    {{"action": "เพิ่มทองคำ", "to_pct": 30, "timing": "ทยอยซื้อ"}}
+  ],
+  "recovery_outlook": "คาดการณ์การฟื้นตัว 1-2 ประโยค",
+  "historical_parallel": "เหตุการณ์ในอดีตที่คล้ายกัน (ถ้ามี)"
+}}
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        analysis = _json.loads(text.strip())
+        analysis["scenario_input"] = scenario
+        analysis["time_horizon"] = time_horizon
+
+        return jsonify(analysis)
+
+    except Exception as e:
+        print(f"Scenario Analysis Error: {e}")
+        return jsonify({"error": str(e)})
+
+@app.route("/api/ai/scenario-templates")
+def api_scenario_templates():
+    from flask import jsonify
+    return jsonify(SCENARIO_TEMPLATES)
+
+
+# =========================================================================
+# Phase 3: Retirement Projection with Monte Carlo Simulation
+# =========================================================================
+import random
+import math
+
+def monte_carlo_retirement(
+    current_age, retirement_age, current_savings, monthly_contribution,
+    expected_return, volatility, simulations=1000
+):
+    """Run Monte Carlo simulation for retirement projection"""
+    years = retirement_age - current_age
+    months = years * 12
+
+    final_values = []
+    paths = []
+
+    monthly_return = expected_return / 12 / 100
+    monthly_vol = volatility / math.sqrt(12) / 100
+
+    for _ in range(simulations):
+        value = current_savings
+        path = [value]
+
+        for _ in range(months):
+            # Random return based on normal distribution
+            r = random.gauss(monthly_return, monthly_vol)
+            value = value * (1 + r) + monthly_contribution
+            if len(paths) < 10:  # Only store 10 sample paths for visualization
+                path.append(value)
+
+        final_values.append(value)
+        if len(paths) < 10:
+            paths.append(path)
+
+    final_values.sort()
+
+    return {
+        "percentile_10": round(final_values[int(simulations * 0.10)], 2),
+        "percentile_25": round(final_values[int(simulations * 0.25)], 2),
+        "percentile_50": round(final_values[int(simulations * 0.50)], 2),
+        "percentile_75": round(final_values[int(simulations * 0.75)], 2),
+        "percentile_90": round(final_values[int(simulations * 0.90)], 2),
+        "mean": round(sum(final_values) / len(final_values), 2),
+        "min": round(min(final_values), 2),
+        "max": round(max(final_values), 2),
+        "sample_paths": paths
+    }
+
+@app.route("/api/ai/retirement-projection", methods=["POST"])
+def api_retirement_projection():
+    from flask import request, jsonify
+    data = request.json
+
+    current_age = data.get("current_age", 35)
+    retirement_age = data.get("retirement_age", 60)
+    current_savings = data.get("current_savings", USER_PORTFOLIO.get("total", 100000))
+    monthly_salary = data.get("monthly_salary", 30000)
+    contribution_rate = data.get("contribution_rate", 3)  # percent
+    employer_match = data.get("employer_match", 5)  # percent (3% match + 2% compensation)
+    expected_return = data.get("expected_return", 6)  # percent annually
+    volatility = data.get("volatility", 12)  # percent annually
+    desired_monthly_pension = data.get("desired_monthly_pension", 20000)
+
+    # Calculate monthly contribution
+    monthly_contribution = monthly_salary * (contribution_rate + employer_match) / 100
+
+    # Run Monte Carlo simulation
+    mc_result = monte_carlo_retirement(
+        current_age, retirement_age, current_savings,
+        monthly_contribution, expected_return, volatility
+    )
+
+    # Calculate if projection meets goal
+    years_in_retirement = 25  # Assume 25 years in retirement
+    total_needed = desired_monthly_pension * 12 * years_in_retirement
+
+    # Get AI interpretation
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    ai_interpretation = None
+
+    if GENAI_AVAILABLE and API_KEY:
+        try:
+            genai.configure(api_key=API_KEY)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+
+            prompt = f"""
+วิเคราะห์ผลการจำลองเงินเกษียณ กบข. และให้คำแนะนำ
+
+ข้อมูลผู้ใช้:
+- อายุปัจจุบัน: {current_age} ปี
+- อายุเกษียณ: {retirement_age} ปี
+- เงินออมปัจจุบัน: {current_savings:,.2f} บาท
+- เงินสะสมต่อเดือน: {monthly_contribution:,.2f} บาท
+- ผลตอบแทนคาดหวัง: {expected_return}% ต่อปี
+
+ผลการจำลอง Monte Carlo (1000 รอบ):
+- กรณีแย่ (10th percentile): {mc_result['percentile_10']:,.2f} บาท
+- กรณีปกติ (50th percentile): {mc_result['percentile_50']:,.2f} บาท
+- กรณีดี (90th percentile): {mc_result['percentile_90']:,.2f} บาท
+
+เป้าหมาย: ต้องการเงินบำนาญเดือนละ {desired_monthly_pension:,} บาท (รวม {total_needed:,} บาท สำหรับ 25 ปี)
+
+ตอบเป็น JSON:
+{{
+  "goal_achievement": "บรรลุเป้าหมาย/ใกล้เคียง/ต้องปรับปรุง",
+  "probability_of_success": 75,
+  "interpretation": "อธิบายผลลัพธ์ 2-3 ประโยค ภาษาง่าย",
+  "recommendations": [
+    "คำแนะนำ 1",
+    "คำแนะนำ 2",
+    "คำแนะนำ 3"
+  ],
+  "risk_warning": "คำเตือนความเสี่ยง (ถ้ามี)",
+  "monthly_pension_estimate": 15000
+}}
+"""
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            ai_interpretation = _json.loads(text.strip())
+
+        except Exception as e:
+            print(f"AI Interpretation Error: {e}")
+
+    return jsonify({
+        "input": {
+            "current_age": current_age,
+            "retirement_age": retirement_age,
+            "years_to_retire": retirement_age - current_age,
+            "current_savings": current_savings,
+            "monthly_contribution": monthly_contribution,
+            "expected_return": expected_return,
+            "volatility": volatility
+        },
+        "simulation": mc_result,
+        "goal": {
+            "desired_monthly_pension": desired_monthly_pension,
+            "total_needed": total_needed,
+            "years_in_retirement": years_in_retirement
+        },
+        "ai_interpretation": ai_interpretation
+    })
+
+
+# =========================================================================
+# Phase 4: Auto-Research Agent
+# =========================================================================
+RESEARCH_CACHE = {"data": None, "last_fetch": None}
+
+@app.route("/api/ai/daily-research")
+def api_daily_research():
+    from flask import jsonify
+    global RESEARCH_CACHE
+
+    now = datetime.datetime.now()
+    # Cache for 4 hours
+    if RESEARCH_CACHE["data"] and RESEARCH_CACHE["last_fetch"]:
+        if (now - RESEARCH_CACHE["last_fetch"]).total_seconds() < 14400:
+            return jsonify(RESEARCH_CACHE["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"error": "google-generativeai not installed"})
+    if not API_KEY:
+        return jsonify({"error": "No API Key"})
+
+    try:
+        # Get latest news
+        news_data = fetch_all_news()
+        recent_news = news_data[:50] if news_data else []
+        news_titles = "\n".join([f"- {n['title']} ({n['date']})" for n in recent_news])
+
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        prompt = f"""
+คุณเป็นนักวิเคราะห์การลงทุนของ กบข. สร้างรายงานวิจัยประจำวันจากข่าวล่าสุด
+
+ข่าวล่าสุด:
+{news_titles}
+
+สร้างรายงานวิจัยในรูปแบบ JSON:
+{{
+  "report_date": "วันที่ปัจจุบัน",
+  "market_summary": "สรุปภาพรวมตลาด 2-3 ประโยค",
+  "key_events": [
+    {{"event": "เหตุการณ์สำคัญ 1", "impact": "ผลกระทบ", "relevance": "high/medium/low"}},
+    {{"event": "เหตุการณ์สำคัญ 2", "impact": "ผลกระทบ", "relevance": "high/medium/low"}},
+    {{"event": "เหตุการณ์สำคัญ 3", "impact": "ผลกระทบ", "relevance": "high/medium/low"}}
+  ],
+  "asset_outlook": {{
+    "thai_equity": {{"trend": "bullish/neutral/bearish", "reason": "เหตุผล"}},
+    "intl_equity": {{"trend": "bullish/neutral/bearish", "reason": "เหตุผล"}},
+    "gold": {{"trend": "bullish/neutral/bearish", "reason": "เหตุผล"}},
+    "fixed_income": {{"trend": "bullish/neutral/bearish", "reason": "เหตุผล"}}
+  }},
+  "risk_alerts": [
+    "ความเสี่ยงที่ต้องจับตา 1",
+    "ความเสี่ยงที่ต้องจับตา 2"
+  ],
+  "opportunities": [
+    "โอกาสการลงทุน 1",
+    "โอกาสการลงทุน 2"
+  ],
+  "gpf_recommendation": "คำแนะนำสำหรับสมาชิก กบข. 1-2 ประโยค",
+  "educational_insight": "ความรู้การลงทุนที่เกี่ยวข้องกับสถานการณ์วันนี้"
+}}
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        research = _json.loads(text.strip())
+        research["generated_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        research["news_analyzed"] = len(recent_news)
+
+        RESEARCH_CACHE["data"] = research
+        RESEARCH_CACHE["last_fetch"] = now
+
+        return jsonify(research)
+
+    except Exception as e:
+        print(f"Daily Research Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+# =========================================================================
+# Phase 4: Document Q&A System
+# =========================================================================
+@app.route("/api/ai/document-qa", methods=["POST"])
+def api_document_qa():
+    from flask import request, jsonify
+    data = request.json
+
+    question = data.get("question", "")
+    document_context = data.get("document_context", "")
+
+    if not question:
+        return jsonify({"error": "กรุณาระบุคำถาม"})
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"error": "google-generativeai not installed"})
+    if not API_KEY:
+        return jsonify({"error": "No API Key"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Get relevant knowledge from RAG
+        knowledge = get_relevant_knowledge(question)
+
+        # If user provides document context, add it
+        full_context = knowledge
+        if document_context:
+            full_context = f"เอกสารที่อัพโหลด:\n{document_context}\n\n{knowledge}"
+
+        prompt = f"""
+คุณเป็นผู้เชี่ยวชาญ กบข. ตอบคำถามจากข้อมูลที่ให้
+
+ข้อมูลอ้างอิง:
+{full_context}
+
+คำถาม: {question}
+
+ตอบเป็น JSON:
+{{
+  "answer": "คำตอบที่ชัดเจน เข้าใจง่าย",
+  "confidence": "high/medium/low",
+  "sources": ["แหล่งข้อมูลที่ใช้อ้างอิง"],
+  "related_topics": ["หัวข้อที่เกี่ยวข้องที่อาจสนใจ"],
+  "disclaimer": "ข้อจำกัดความรับผิดชอบ (ถ้าจำเป็น)"
+}}
+"""
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        answer = _json.loads(text.strip())
+        return jsonify(answer)
+
+    except Exception as e:
+        print(f"Document QA Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+# =========================================================================
+# Enhanced AI Chat with RAG
+# =========================================================================
+@app.route("/api/ai/chat-enhanced", methods=["POST"])
+def api_chat_enhanced():
+    from flask import request, jsonify
+    data = request.json
+    user_message = data.get("message", "")
+    history = data.get("history", [])
+    include_market_data = data.get("include_market_data", True)
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE:
+        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์นี้ต้องติดตั้ง google-generativeai ก่อน"})
+    if not API_KEY:
+        return jsonify({"reply": "ขออภัยครับ กรุณาตั้งค่า GEMINI_API_KEY"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+
+        # Get relevant knowledge for RAG
+        knowledge = get_relevant_knowledge(user_message)
+
+        # Get current market context if requested
+        market_context = ""
+        if include_market_data:
+            try:
+                outlook = generate_ai_outlook()
+                market_context = f"""
+สถานการณ์ตลาดปัจจุบัน:
+- เศรษฐกิจโลก: {outlook.get('global_economy', 'N/A')}
+- เศรษฐกิจไทย: {outlook.get('thai_economy', 'N/A')}
+- ทองคำ: {outlook.get('gold_view', 'N/A')}
+"""
+            except:
+                pass
+
+        formatted_history = []
+        for h in history[-10:]:  # Keep last 10 messages
+            formatted_history.append({
+                "role": h["role"],
+                "parts": [h["parts"]]
+            })
+
+        system_instruction = f"""
+คุณคือ "น้อง กบข. AI" ผู้ช่วยอัจฉริยะของกองทุนบำเหน็จบำนาญข้าราชการ (กบข.)
+
+ความสามารถของคุณ:
+1. ตอบคำถามเกี่ยวกับ กบข. และการลงทุน
+2. ให้คำแนะนำการจัดพอร์ตตามความเสี่ยง
+3. อธิบายแนวคิดการลงทุนให้เข้าใจง่าย
+4. วิเคราะห์สถานการณ์ตลาดปัจจุบัน
+
+ฐานความรู้ กบข.:
+{knowledge}
+
+{market_context}
+
+ข้อมูลพอร์ตผู้ใช้:
+- แผนที่ถือ: {', '.join([h['plan'] for h in USER_PORTFOLIO['holdings']])}
+- มูลค่ารวม: {USER_PORTFOLIO['total']:,.2f} บาท
+- กำไร: {USER_PORTFOLIO['profit']:,.2f} บาท ({USER_PORTFOLIO['profit_pct']:.2f}%)
+
+แนวทางการตอบ:
+- ใช้ภาษาไทยที่เข้าใจง่าย เป็นกันเอง
+- ใส่ Emoji ประกอบบ้างให้ดูน่าสนใจ
+- อ้างอิงข้อมูลจากฐานความรู้เมื่อเกี่ยวข้อง
+- ถ้าไม่แน่ใจ ให้บอกตรงๆ ว่าไม่มีข้อมูล
+- เตือนเรื่องความเสี่ยงเมื่อเหมาะสม
+"""
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=system_instruction
+        )
+
+        chat = model.start_chat(history=formatted_history)
+        response = chat.send_message(user_message)
+
+        return jsonify({
+            "reply": response.text,
+            "knowledge_used": len(knowledge) > 100,
+            "market_data_included": include_market_data and len(market_context) > 0
+        })
+
+    except Exception as e:
+        print(f"Enhanced Chat Error: {e}")
+        return jsonify({"reply": "ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง 🙏"})
+
+
+# =========================================================================
+# AI Feature Summary Endpoint
+# =========================================================================
+@app.route("/api/ai/features")
+def api_ai_features():
+    from flask import jsonify
+    return jsonify({
+        "available_features": [
+            {
+                "name": "AI Market Outlook",
+                "endpoint": "/api/outlook",
+                "method": "GET",
+                "description": "วิเคราะห์ภาพรวมตลาดจากข่าวล่าสุดด้วย AI"
+            },
+            {
+                "name": "AI Portfolio Advice",
+                "endpoint": "/api/ai/portfolio-advice",
+                "method": "POST",
+                "description": "แนะนำ Asset Allocation ตาม profile ผู้ใช้",
+                "params": ["age", "years_to_retire", "risk_tolerance", "monthly_salary"]
+            },
+            {
+                "name": "Rebalance Check",
+                "endpoint": "/api/ai/rebalance-check",
+                "method": "POST",
+                "description": "ตรวจสอบและแนะนำการ Rebalance พอร์ต",
+                "params": ["current_allocation", "target_allocation", "threshold"]
+            },
+            {
+                "name": "Scenario Analysis",
+                "endpoint": "/api/ai/scenario-analysis",
+                "method": "POST",
+                "description": "วิเคราะห์ผลกระทบจากสถานการณ์สมมติ",
+                "params": ["scenario_type", "custom_scenario", "time_horizon"]
+            },
+            {
+                "name": "Scenario Templates",
+                "endpoint": "/api/ai/scenario-templates",
+                "method": "GET",
+                "description": "รายการสถานการณ์สมมติที่มีให้เลือก"
+            },
+            {
+                "name": "Retirement Projection",
+                "endpoint": "/api/ai/retirement-projection",
+                "method": "POST",
+                "description": "จำลองเงินเกษียณด้วย Monte Carlo + AI",
+                "params": ["current_age", "retirement_age", "current_savings", "monthly_salary", "expected_return"]
+            },
+            {
+                "name": "Daily Research",
+                "endpoint": "/api/ai/daily-research",
+                "method": "GET",
+                "description": "รายงานวิจัยประจำวันจาก AI"
+            },
+            {
+                "name": "Document Q&A",
+                "endpoint": "/api/ai/document-qa",
+                "method": "POST",
+                "description": "ถาม-ตอบจากเอกสาร กบข.",
+                "params": ["question", "document_context"]
+            },
+            {
+                "name": "Enhanced Chat",
+                "endpoint": "/api/ai/chat-enhanced",
+                "method": "POST",
+                "description": "AI Chatbot พร้อม RAG และข้อมูลตลาด",
+                "params": ["message", "history", "include_market_data"]
+            },
+            {
+                "name": "What-If Simulator",
+                "endpoint": "/api/simulate",
+                "method": "POST",
+                "description": "จำลองผลกระทบต่อพอร์ตจากสถานการณ์",
+                "params": ["scenario"]
+            }
+        ],
+        "genai_available": GENAI_AVAILABLE,
+        "api_key_configured": bool(os.environ.get("GEMINI_API_KEY"))
+    })
+
+
+# =========================================================================
+# AI Enhanced Section APIs - Real-time Analysis
+# =========================================================================
+
+# Cache for AI section analyses
+AI_SECTION_CACHE = {
+    "top_plans": {"data": None, "last_fetch": None},
+    "market_deep": {"data": None, "last_fetch": None},
+    "technical_summary": {"data": None, "last_fetch": None},
+    "news_impact": {"data": None, "last_fetch": None},
+    "academy_insight": {"data": None, "last_fetch": None},
+    "roadmap_insight": {"data": None, "last_fetch": None}
+}
+
+@app.route("/api/ai/top-plans")
+def api_ai_top_plans():
+    """AI แนะนำ 2 แผนที่ดีที่สุดสำหรับสภาวะตลาดปัจจุบัน"""
+    from flask import jsonify
+    global AI_SECTION_CACHE, NEWS_CACHE
+
+    now = datetime.datetime.now()
+    cache = AI_SECTION_CACHE["top_plans"]
+    if cache["data"] and cache["last_fetch"]:
+        if (now - cache["last_fetch"]).total_seconds() < 3600:  # 1 hour cache
+            return jsonify(cache["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        return jsonify({
+            "error": "AI ไม่พร้อมใช้งาน",
+            "fallback": True,
+            "recommendation": "หุ้นต่างประเทศ + ทองคำ เป็นคู่ที่มี Sharpe Ratio สูงที่สุด",
+            "reasoning": "การกระจายความเสี่ยงระหว่างสินทรัพย์ที่มี Correlation ต่ำช่วยลดความผันผวน"
+        })
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Get news for context
+        if not NEWS_CACHE["data"]:
+            NEWS_CACHE["data"] = fetch_all_news()
+            NEWS_CACHE["last_fetch"] = now
+
+        recent_news = NEWS_CACHE["data"][:30]
+        news_context = "\n".join([f"- {n['title']}" for n in recent_news])
+
+        # Fund performance data
+        fund_data = "\n".join([
+            f"- {f['name_th']}: ผลตอบแทนล่าสุด {f['r_jun68'] or f['r2567'] or 0}%, ปี 2567: {f['r2567'] or 0}%, ความเสี่ยง {f['risk_level']}/8"
+            for f in FUNDS
+        ])
+
+        prompt = f"""คุณเป็นผู้เชี่ยวชาญด้านการลงทุน กบข. วิเคราะห์สถานการณ์ปัจจุบันและแนะนำ 2 แผนที่ดีที่สุดสำหรับช่วงนี้
+
+ข่าวล่าสุด:
+{news_context}
+
+ผลการดำเนินงานแผน กบข.:
+{fund_data}
+
+ตอบเป็น JSON เท่านั้น:
+{{
+  "plan1": {{
+    "name": "ชื่อแผนที่ 1",
+    "weight": 60,
+    "reasoning": "เหตุผลสั้นๆ ทำไมถึงแนะนำแผนนี้ในช่วงนี้"
+  }},
+  "plan2": {{
+    "name": "ชื่อแผนที่ 2",
+    "weight": 40,
+    "reasoning": "เหตุผลสั้นๆ"
+  }},
+  "market_condition": "สรุปสภาวะตลาดปัจจุบันใน 1 ประโยค",
+  "risk_alert": "คำเตือนความเสี่ยงที่ควรระวังในช่วงนี้ (ถ้ามี)",
+  "confidence": "high/medium/low",
+  "time_horizon": "แนะนำสำหรับระยะ (สั้น/กลาง/ยาว)"
+}}"""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        result = _json.loads(text.strip())
+        result["is_ai"] = True
+        result["generated_at"] = now.strftime("%Y-%m-%d %H:%M")
+
+        AI_SECTION_CACHE["top_plans"]["data"] = result
+        AI_SECTION_CACHE["top_plans"]["last_fetch"] = now
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"AI Top Plans Error: {e}")
+        return jsonify({"error": str(e), "fallback": True})
+
+
+@app.route("/api/ai/market-deep-analysis")
+def api_ai_market_deep():
+    """AI วิเคราะห์เจาะลึกตลาดอ้างอิง Real-time"""
+    from flask import jsonify
+    global AI_SECTION_CACHE, NEWS_CACHE
+
+    now = datetime.datetime.now()
+    cache = AI_SECTION_CACHE["market_deep"]
+    if cache["data"] and cache["last_fetch"]:
+        if (now - cache["last_fetch"]).total_seconds() < 1800:  # 30 min cache
+            return jsonify(cache["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        return jsonify({"error": "AI ไม่พร้อมใช้งาน"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        if not NEWS_CACHE["data"]:
+            NEWS_CACHE["data"] = fetch_all_news()
+            NEWS_CACHE["last_fetch"] = now
+
+        recent_news = NEWS_CACHE["data"][:25]
+        news_context = "\n".join([f"- {n['title']}" for n in recent_news])
+
+        prompt = f"""วิเคราะห์ตลาดสินทรัพย์ที่เกี่ยวข้องกับแผนลงทุน กบข. จากข่าวล่าสุด:
+
+{news_context}
+
+สินทรัพย์ที่ กบข. ลงทุน:
+1. ทองคำ (XAUUSD) - แผนทองคำ
+2. S&P 500 / หุ้นโลก - แผนหุ้นต่างประเทศ
+3. SET Index / หุ้นไทย - แผนหุ้นไทย
+4. ตราสารหนี้โลก - แผนตราสารหนี้ต่างประเทศ
+5. USD/THB - อัตราแลกเปลี่ยน (กระทบทุกแผนต่างประเทศ)
+
+ตอบเป็น JSON:
+{{
+  "gold": {{
+    "trend": "bullish/bearish/neutral",
+    "signal": "buy/sell/hold",
+    "key_driver": "ปัจจัยหลักที่ส่งผล",
+    "impact_gpf": "ผลกระทบต่อแผนทองคำ กบข."
+  }},
+  "us_equity": {{
+    "trend": "bullish/bearish/neutral",
+    "signal": "buy/sell/hold",
+    "key_driver": "ปัจจัยหลัก",
+    "impact_gpf": "ผลกระทบต่อแผนหุ้นต่างประเทศ"
+  }},
+  "thai_equity": {{
+    "trend": "bullish/bearish/neutral",
+    "signal": "buy/sell/hold",
+    "key_driver": "ปัจจัยหลัก",
+    "impact_gpf": "ผลกระทบต่อแผนหุ้นไทย"
+  }},
+  "bond": {{
+    "trend": "bullish/bearish/neutral",
+    "signal": "buy/sell/hold",
+    "key_driver": "ปัจจัยหลัก เช่น นโยบาย Fed",
+    "impact_gpf": "ผลกระทบต่อแผนตราสารหนี้"
+  }},
+  "forex": {{
+    "usd_thb_trend": "แข็งค่า/อ่อนค่า/ทรงตัว",
+    "impact": "ผลกระทบต่อผลตอบแทนแผนต่างประเทศ (บาท)"
+  }},
+  "overall_summary": "สรุปภาพรวมตลาดทั้งหมดใน 2-3 ประโยค",
+  "top_opportunity": "โอกาสที่น่าสนใจที่สุดในช่วงนี้"
+}}"""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        result = _json.loads(text.strip())
+        result["is_ai"] = True
+        result["timestamp"] = now.strftime("%Y-%m-%d %H:%M")
+
+        AI_SECTION_CACHE["market_deep"]["data"] = result
+        AI_SECTION_CACHE["market_deep"]["last_fetch"] = now
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"AI Market Deep Analysis Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/ai/technical-summary")
+def api_ai_technical_summary():
+    """AI สรุปสัญญาณเทคนิคจากตลาดหลัก"""
+    from flask import jsonify
+    global AI_SECTION_CACHE
+
+    now = datetime.datetime.now()
+    cache = AI_SECTION_CACHE["technical_summary"]
+    if cache["data"] and cache["last_fetch"]:
+        if (now - cache["last_fetch"]).total_seconds() < 1800:
+            return jsonify(cache["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        return jsonify({"error": "AI ไม่พร้อมใช้งาน"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        prompt = """คุณเป็นนักวิเคราะห์ทางเทคนิค ให้สรุปสัญญาณเทคนิคสำหรับสินทรัพย์หลักที่เกี่ยวข้องกับ กบข.
+
+สินทรัพย์: ทองคำ (XAUUSD), S&P 500, SET Index, USD/THB
+
+ตอบเป็น JSON:
+{
+  "gold_xauusd": {
+    "signal": "Strong Buy/Buy/Neutral/Sell/Strong Sell",
+    "oscillators": "Overbought/Neutral/Oversold",
+    "moving_avg": "Above/Below MA20/MA50",
+    "support": "ระดับแนวรับสำคัญ",
+    "resistance": "ระดับแนวต้านสำคัญ",
+    "recommendation": "คำแนะนำสำหรับสมาชิก กบข."
+  },
+  "sp500": {
+    "signal": "Strong Buy/Buy/Neutral/Sell/Strong Sell",
+    "oscillators": "Overbought/Neutral/Oversold",
+    "moving_avg": "Above/Below MA20/MA50",
+    "support": "ระดับแนวรับ",
+    "resistance": "ระดับแนวต้าน",
+    "recommendation": "คำแนะนำ"
+  },
+  "set_index": {
+    "signal": "Strong Buy/Buy/Neutral/Sell/Strong Sell",
+    "oscillators": "Overbought/Neutral/Oversold",
+    "moving_avg": "Above/Below MA20/MA50",
+    "support": "ระดับแนวรับ",
+    "resistance": "ระดับแนวต้าน",
+    "recommendation": "คำแนะนำ"
+  },
+  "usd_thb": {
+    "signal": "บาทแข็ง/บาทอ่อน/ทรงตัว",
+    "trend": "Uptrend/Downtrend/Sideways",
+    "impact_foreign_plans": "ผลกระทบต่อแผนลงทุนต่างประเทศ"
+  },
+  "overall_technical_view": "สรุปมุมมองภาพรวมจากสัญญาณเทคนิค",
+  "action_suggestion": "คำแนะนำสำหรับสมาชิก กบข. ที่ต้องการปรับแผน"
+}"""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        result = _json.loads(text.strip())
+        result["is_ai"] = True
+        result["timestamp"] = now.strftime("%Y-%m-%d %H:%M")
+
+        AI_SECTION_CACHE["technical_summary"]["data"] = result
+        AI_SECTION_CACHE["technical_summary"]["last_fetch"] = now
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"AI Technical Summary Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/ai/news-impact")
+def api_ai_news_impact():
+    """AI วิเคราะห์ข่าวและให้คะแนนผลกระทบต่อแต่ละแผน"""
+    from flask import jsonify
+    global AI_SECTION_CACHE, NEWS_CACHE
+
+    now = datetime.datetime.now()
+    cache = AI_SECTION_CACHE["news_impact"]
+    if cache["data"] and cache["last_fetch"]:
+        if (now - cache["last_fetch"]).total_seconds() < 3600:
+            return jsonify(cache["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        return jsonify({"error": "AI ไม่พร้อมใช้งาน"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        if not NEWS_CACHE["data"]:
+            NEWS_CACHE["data"] = fetch_all_news()
+            NEWS_CACHE["last_fetch"] = now
+
+        recent_news = NEWS_CACHE["data"][:20]
+        news_list = "\n".join([f"{i+1}. {n['title']} ({n['date']})" for i, n in enumerate(recent_news)])
+
+        prompt = f"""วิเคราะห์ข่าวล่าสุดและให้คะแนนผลกระทบต่อแผนลงทุน กบข.:
+
+ข่าว:
+{news_list}
+
+แผนลงทุน กบข. ที่ต้องวิเคราะห์:
+1. แผนหุ้นต่างประเทศ (equity_intl)
+2. แผนทองคำ (gold)
+3. แผนหุ้นไทย (equity_thai)
+4. แผนตราสารหนี้ (fixed_income)
+5. แผนตราสารหนี้ต่างประเทศ (fixed_intl)
+
+ตอบเป็น JSON:
+{{
+  "news_analysis": [
+    {{
+      "headline": "หัวข้อข่าว (ย่อให้สั้น)",
+      "sentiment": "positive/negative/neutral",
+      "impact_scores": {{
+        "equity_intl": {{ "score": -5 ถึง +5, "reason": "เหตุผลสั้นๆ" }},
+        "gold": {{ "score": -5 ถึง +5, "reason": "เหตุผล" }},
+        "equity_thai": {{ "score": -5 ถึง +5, "reason": "เหตุผล" }},
+        "fixed_income": {{ "score": -5 ถึง +5, "reason": "เหตุผล" }}
+      }}
+    }}
+  ],
+  "aggregate_impact": {{
+    "most_positive_plan": "แผนที่ได้ประโยชน์มากสุด",
+    "most_negative_plan": "แผนที่เสียประโยชน์มากสุด",
+    "overall_sentiment": "positive/negative/neutral",
+    "recommendation": "คำแนะนำสำหรับสมาชิก กบข. จากข่าวเหล่านี้"
+  }},
+  "top_3_impactful_news": ["ข่าวที่มีผลกระทบมากที่สุด 3 ข่าว"]
+}}
+
+วิเคราะห์เฉพาะ 5 ข่าวที่สำคัญที่สุด"""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        result = _json.loads(text.strip())
+        result["is_ai"] = True
+        result["analyzed_at"] = now.strftime("%Y-%m-%d %H:%M")
+        result["news_count"] = len(recent_news)
+
+        AI_SECTION_CACHE["news_impact"]["data"] = result
+        AI_SECTION_CACHE["news_impact"]["last_fetch"] = now
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"AI News Impact Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/ai/academy-insight")
+def api_ai_academy_insight():
+    """AI สร้าง Educational Content ตามสถานการณ์ตลาด"""
+    from flask import jsonify
+    global AI_SECTION_CACHE, NEWS_CACHE
+
+    now = datetime.datetime.now()
+    cache = AI_SECTION_CACHE["academy_insight"]
+    if cache["data"] and cache["last_fetch"]:
+        if (now - cache["last_fetch"]).total_seconds() < 7200:  # 2 hour cache
+            return jsonify(cache["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        return jsonify({"error": "AI ไม่พร้อมใช้งาน"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        if not NEWS_CACHE["data"]:
+            NEWS_CACHE["data"] = fetch_all_news()
+            NEWS_CACHE["last_fetch"] = now
+
+        recent_news = NEWS_CACHE["data"][:15]
+        news_context = "\n".join([f"- {n['title']}" for n in recent_news])
+
+        prompt = f"""คุณเป็นอาจารย์สอนการลงทุนของ กบข. สร้าง Educational Content ที่เชื่อมโยงกับสถานการณ์ตลาดปัจจุบัน
+
+ข่าวล่าสุด:
+{news_context}
+
+ตอบเป็น JSON:
+{{
+  "daily_lesson": {{
+    "title": "หัวข้อบทเรียนวันนี้ (เชื่อมโยงกับข่าว)",
+    "content": "เนื้อหาอธิบายความรู้การลงทุน 2-3 ประโยค",
+    "practical_tip": "เคล็ดลับที่นำไปใช้ได้จริง"
+  }},
+  "term_of_the_day": {{
+    "term": "ศัพท์การลงทุนที่ควรรู้",
+    "definition": "คำอธิบาย",
+    "example": "ตัวอย่างที่เกี่ยวข้องกับ กบข."
+  }},
+  "myth_buster": {{
+    "myth": "ความเชื่อผิดๆ เกี่ยวกับการลงทุน",
+    "truth": "ความจริง",
+    "evidence": "หลักฐานหรือเหตุผล"
+  }},
+  "market_connection": {{
+    "current_event": "เหตุการณ์ในข่าวที่เกิดขึ้น",
+    "lesson_learned": "บทเรียนที่ได้จากเหตุการณ์นี้",
+    "how_gpf_member_benefits": "สมาชิก กบข. จะได้ประโยชน์อย่างไร"
+  }},
+  "quiz": {{
+    "question": "คำถามทดสอบความรู้",
+    "options": ["ตัวเลือก A", "ตัวเลือก B", "ตัวเลือก C"],
+    "correct_answer": "A/B/C",
+    "explanation": "คำอธิบายคำตอบ"
+  }}
+}}"""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        result = _json.loads(text.strip())
+        result["is_ai"] = True
+        result["generated_date"] = now.strftime("%Y-%m-%d")
+
+        AI_SECTION_CACHE["academy_insight"]["data"] = result
+        AI_SECTION_CACHE["academy_insight"]["last_fetch"] = now
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"AI Academy Insight Error: {e}")
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/ai/roadmap-insight")
+def api_ai_roadmap_insight():
+    """AI วิเคราะห์แผนการลงทุนสำหรับอนาคต"""
+    from flask import jsonify
+    global AI_SECTION_CACHE, NEWS_CACHE
+
+    now = datetime.datetime.now()
+    cache = AI_SECTION_CACHE["roadmap_insight"]
+    if cache["data"] and cache["last_fetch"]:
+        if (now - cache["last_fetch"]).total_seconds() < 7200:
+            return jsonify(cache["data"])
+
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not API_KEY or not GENAI_AVAILABLE:
+        return jsonify({"error": "AI ไม่พร้อมใช้งาน"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        if not NEWS_CACHE["data"]:
+            NEWS_CACHE["data"] = fetch_all_news()
+            NEWS_CACHE["last_fetch"] = now
+
+        recent_news = NEWS_CACHE["data"][:20]
+        news_context = "\n".join([f"- {n['title']}" for n in recent_news])
+
+        prompt = f"""คุณเป็นผู้เชี่ยวชาญวางแผนการลงทุนระยะยาวของ กบข. วิเคราะห์และแนะนำแผนการลงทุนสำหรับอนาคต
+
+ข่าวและแนวโน้มล่าสุด:
+{news_context}
+
+แผน กบข. ที่มี:
+- แผนตราสารหนี้ระยะสั้น (ความเสี่ยงต่ำมาก)
+- แผนตราสารหนี้ (ความเสี่ยงปานกลาง)
+- แผนทองคำ (ความเสี่ยงปานกลาง-สูง)
+- แผนหุ้นต่างประเทศ (ความเสี่ยงสูง)
+- แผนหุ้นไทย (ความเสี่ยงสูงมาก)
+- แผน Life Path / สมดุลตามอายุ
+
+ตอบเป็น JSON:
+{{
+  "short_term": {{
+    "horizon": "0-1 ปี",
+    "recommended_plans": ["แผนที่ 1", "แผนที่ 2"],
+    "allocation": "สัดส่วนที่แนะนำ",
+    "reasoning": "เหตุผลที่แนะนำ ตามสถานการณ์ปัจจุบัน",
+    "risk_factors": ["ความเสี่ยงที่ต้องระวัง"]
+  }},
+  "medium_term": {{
+    "horizon": "1-3 ปี",
+    "recommended_plans": ["แผนที่ 1", "แผนที่ 2"],
+    "allocation": "สัดส่วน",
+    "reasoning": "เหตุผล",
+    "opportunities": ["โอกาสที่น่าสนใจ"]
+  }},
+  "long_term": {{
+    "horizon": "3+ ปี",
+    "recommended_plans": ["แผนที่ 1", "แผนที่ 2"],
+    "allocation": "สัดส่วน",
+    "reasoning": "เหตุผล",
+    "growth_drivers": ["ปัจจัยขับเคลื่อนการเติบโต"]
+  }},
+  "mega_trends": [
+    {{
+      "trend": "ชื่อ Mega Trend",
+      "impact_on_gpf": "ผลกระทบต่อการลงทุน กบข.",
+      "recommended_action": "คำแนะนำ"
+    }}
+  ],
+  "key_message": "ข้อความสำคัญสำหรับสมาชิก กบข.",
+  "disclaimer": "คำเตือน: การลงทุนมีความเสี่ยง..."
+}}"""
+
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+
+        result = _json.loads(text.strip())
+        result["is_ai"] = True
+        result["analyzed_at"] = now.strftime("%Y-%m-%d %H:%M")
+
+        AI_SECTION_CACHE["roadmap_insight"]["data"] = result
+        AI_SECTION_CACHE["roadmap_insight"]["last_fetch"] = now
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"AI Roadmap Insight Error: {e}")
+        return jsonify({"error": str(e)})
+
+
 def get_latest_return(f):
     if f["r_jun68"] is not None:
         return f["r_jun68"]
@@ -516,6 +2184,8 @@ def get_recent_annual(f):
 
 def compute_scores():
     scored = []
+    momentum = get_asset_momentum()
+    
     for f in FUNDS:
         latest = get_latest_return(f)
         annual = get_recent_annual(f)
@@ -523,14 +2193,25 @@ def compute_scores():
         avg5 = f["avg_5y"] if f["avg_5y"] is not None else avg3
         si = f["since_inception"] if f["since_inception"] is not None else avg3
         mdd = abs(f["max_drawdown"])
+        
+        # Calculate momentum proxy
+        f_mom = 0.0
+        if f["id"] in momentum:
+            f_mom = momentum[f["id"]]
+        elif "equity_intl" in f["id"] or f["id"] == "growth65":
+            f_mom = momentum.get("equity_intl", 0) * 0.65
+        elif "growth35" in f["id"] or "basic" in f["id"] or "shariah" in f["id"]:
+            f_mom = momentum.get("equity_intl", 0) * 0.35
+            
         raw = (
             latest * 0.20 + annual * 0.20 + avg3 * 0.15 + si * 0.15
             + (8 - f["risk_level"]) * 0.5 * 0.10 - mdd * 0.05
             + (latest - avg3) * 0.15
+            + f_mom * 0.15  # Incorporate short-term momentum
         )
         scored.append({**f, "raw_score": raw, "latest_return": latest,
                        "annual_return": annual, "eff_avg3": avg3,
-                       "eff_avg5": avg5, "eff_si": si})
+                       "eff_avg5": avg5, "eff_si": si, "momentum_score": f_mom})
     mn = min(s["raw_score"] for s in scored)
     mx = max(s["raw_score"] for s in scored)
     rng = mx - mn if mx != mn else 1
@@ -717,18 +2398,42 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
 </div>
 
 <!-- ======= MARKET OUTLOOK ======= -->
-<h4 class="stitle"><i class="bi bi-globe-americas"></i> สถานการณ์ปัจจุบันและมุมมองการลงทุน ({{ outlook.date }})</h4>
+<h4 class="stitle"><i class="bi bi-globe-americas"></i> สถานการณ์ปัจจุบันและมุมมองการลงทุน (<span id="out-date">{{ outlook.date }}</span>) <span class="badge bg-primary text-white ms-2 rounded-pill shadow-sm" id="out-ai-badge" style="font-size:0.65rem; display:none; background: linear-gradient(135deg, #1d4ed8, #9333ea) !important;"><i class="bi bi-robot"></i> AI Generated (Real-time)</span></h4>
 <div class="card border-0 shadow-sm rounded-4 mb-4" style="border-left:5px solid #1E88E5 !important;">
  <div class="card-body">
-  <div class="row g-3 small">
+  <div class="row g-3 small" id="outlook-content">
    <div class="col-md-6">
-    <p class="mb-2"><strong class="text-primary"><i class="bi bi-graph-up-arrow"></i> เศรษฐกิจโลก:</strong> {{ outlook.global_economy }}</p>
-    <p class="mb-0"><strong class="text-danger"><i class="bi bi-geo-alt-fill"></i> เศรษฐกิจไทย:</strong> {{ outlook.thai_economy }}</p>
+    <p class="mb-2"><strong class="text-primary"><i class="bi bi-graph-up-arrow"></i> เศรษฐกิจโลก:</strong> <span id="out-global">{{ outlook.global_economy }}</span></p>
+    <p class="mb-0"><strong class="text-danger"><i class="bi bi-geo-alt-fill"></i> เศรษฐกิจไทย:</strong> <span id="out-thai">{{ outlook.thai_economy }}</span></p>
    </div>
    <div class="col-md-6">
-    <p class="mb-2"><strong class="text-gold"><i class="bi bi-shield-fill-check"></i> มุมมองทองคำ:</strong> {{ outlook.gold_view }}</p>
-    <p class="mb-0"><strong class="text-success"><i class="bi bi-bullseye"></i> กลยุทธ์แนะนำ:</strong> {{ outlook.strategy }}</p>
+    <p class="mb-2"><strong class="text-gold"><i class="bi bi-shield-fill-check"></i> มุมมองทองคำ:</strong> <span id="out-gold">{{ outlook.gold_view }}</span></p>
+    <p class="mb-0"><strong class="text-success"><i class="bi bi-bullseye"></i> กลยุทธ์แนะนำ:</strong> <span id="out-strategy">{{ outlook.strategy }}</span></p>
    </div>
+  </div>
+  
+  <hr class="text-muted opacity-25 my-3">
+  
+  <!-- GPF Fear & Greed Index Gauge -->
+  <div class="row align-items-center">
+    <div class="col-md-3 text-center mb-2 mb-md-0">
+        <strong><i class="bi bi-speedometer2 text-danger"></i> GPF Fear & Greed Index</strong>
+    </div>
+    <div class="col-md-9">
+        <div class="d-flex justify-content-between mb-1" style="font-size:0.75rem;">
+            <span class="text-danger fw-bold">Extreme Fear (0)</span>
+            <span class="text-warning fw-bold">Neutral (50)</span>
+            <span class="text-success fw-bold">Extreme Greed (100)</span>
+        </div>
+        <div class="progress" style="height:14px; border-radius:7px; background:linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #198754 100%); position: relative;">
+            <div id="fg-pointer" style="position:absolute; top:-4px; width:4px; height:22px; background:#000; border-radius:2px; box-shadow:0 0 4px white; left: 50%; transition: left 1s ease-in-out;"></div>
+        </div>
+        <div class="text-center mt-2 small text-muted" id="fg-text">
+            กำลังวิเคราะห์ความเชื่อมั่นตลาด...
+        </div>
+        <!-- Hidden data from backend -->
+        <span id="fg-data" style="display:none;">{{ outlook.fear_greed_score | default('50') }}</span>
+    </div>
   </div>
  </div>
 </div>
@@ -803,15 +2508,24 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
     </div>
    </div>
   </div>
-  {% if diff_latest != 0 %}
-  <div class="alert {% if diff_latest > 0 %}alert-success{% else %}alert-info{% endif %} mt-3 mb-0 small">
-   <i class="bi bi-{% if diff_latest > 0 %}check-circle{% else %}info-circle{% endif %}-fill"></i>
-   {% if diff_latest > 0 %}
-   แผนแนะนำให้ผลตอบแทนล่าสุดสูงกว่าพอร์ตปัจจุบัน <strong>+{{ diff_latest }}%</strong>
-   (≈ <strong>{{ "{:,.0f}".format(port.total * diff_latest / 100) }} บาท/ปี</strong>)
-   {% else %}
-   พอร์ตปัจจุบันของคุณเป็นหนึ่งในคู่ที่ดีที่สุดอยู่แล้ว! แนะนำปรับสัดส่วนเล็กน้อยเพื่อเพิ่ม Sharpe Ratio
-   {% endif %}
+  {% if diff_latest != 0 or action_required %}
+  <div class="alert {% if action_required %}alert-warning border-warning{% elif diff_latest > 0 %}alert-success{% else %}alert-info{% endif %} mt-3 mb-0 small shadow-sm">
+   <div class="d-flex align-items-start gap-2">
+     <i class="bi bi-{% if action_required %}exclamation-triangle-fill text-warning fs-5{% elif diff_latest > 0 %}check-circle-fill text-success fs-5{% else %}info-circle-fill text-info fs-5{% endif %}" style="margin-top:-2px"></i>
+     <div>
+       {% if action_required %}
+       <strong class="text-dark">⚠️ สัญญาณสับเปลี่ยนแผน (Action Required):</strong><br>
+       <span class="text-dark">{{ action_msg }}</span>
+       {% else %}
+           {% if diff_latest > 0 %}
+           แผนแนะนำให้ผลตอบแทนล่าสุดสูงกว่าพอร์ตปัจจุบัน <strong>+{{ diff_latest }}%</strong>
+           (≈ <strong>{{ "{:,.0f}".format(port.total * diff_latest / 100) }} บาท/ปี</strong>) ยิ่งไปกว่านั้นยังมีแนวโน้มเชิงบวกจากกราฟเทคนิค
+           {% else %}
+           พอร์ตปัจจุบันของคุณแข็งแกร่งและเป็นหนึ่งในคู่ที่ดีที่สุดอยู่แล้ว! อาจปรับสัดส่วนเล็กน้อยตามแผนแนะนำเพื่อเพิ่ม Sharpe Ratio
+           {% endif %}
+       {% endif %}
+     </div>
+   </div>
   </div>
   {% endif %}
  </div>
@@ -1139,6 +2853,204 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
     </div>
 </div>
 
+<div class="alert alert-info border-info shadow-sm rounded-4 mb-4" id="ai-academy-tip" style="display:none;">
+   <div class="d-flex align-items-start gap-2">
+     <i class="bi bi-robot text-primary fs-5 mt-1"></i>
+     <div>
+       <strong class="text-primary">💡 AI Insight ประจำวันนี้:</strong>
+       <span class="text-dark d-block mt-1" id="out-academy-tip">กำลังวิเคราะห์ข้อมูล...</span>
+     </div>
+   </div>
+</div>
+
+<!-- ======= AI HUB - ADVANCED FEATURES ======= -->
+<h4 class="stitle" id="ai-hub"><i class="bi bi-cpu-fill"></i> AI Hub — เครื่องมือวิเคราะห์อัจฉริยะ <span class="badge rounded-pill text-white ms-2" style="font-size:0.6rem; background:linear-gradient(135deg, #7c3aed, #db2777);">NEW</span></h4>
+
+<!-- AI Usage Legend -->
+<div class="alert mb-3 py-2 px-3 rounded-3 d-flex flex-wrap align-items-center gap-3" style="background:linear-gradient(135deg, #f8fafc, #f1f5f9); border:1px solid #e2e8f0;">
+    <span class="small fw-bold text-muted"><i class="bi bi-info-circle"></i> สัญลักษณ์:</span>
+    <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.65rem;"><i class="bi bi-robot"></i> Gemini AI</span>
+    <span class="small text-muted">= ใช้ AI ประมวลผล</span>
+    <span class="badge rounded-pill bg-secondary" style="font-size:0.65rem;"><i class="bi bi-calculator"></i> Algorithm</span>
+    <span class="small text-muted">= คำนวณทางคณิตศาสตร์</span>
+    <span class="badge rounded-pill bg-info text-dark" style="font-size:0.65rem;"><i class="bi bi-database"></i> RAG</span>
+    <span class="small text-muted">= ค้นหาจากฐานความรู้</span>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- AI Portfolio Advisor -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:linear-gradient(135deg, #f0f9ff, #e0f2fe); border-left:4px solid #0ea5e9 !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:42px;height:42px;background:linear-gradient(135deg,#0284c7,#0ea5e9);"><i class="bi bi-pie-chart-fill"></i></div>
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#0369a1;">AI Portfolio Advisor <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.55rem;"><i class="bi bi-robot"></i> AI</span></h6>
+                        <small class="text-muted">แนะนำสัดส่วนลงทุนส่วนตัว</small>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">อายุ (ปี)</label>
+                    <input type="number" id="ai-age" class="form-control form-control-sm" value="35" min="20" max="60">
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">ระดับความเสี่ยงที่รับได้</label>
+                    <select id="ai-risk" class="form-select form-select-sm">
+                        <option value="low">ต่ำ - รักษาเงินต้น</option>
+                        <option value="medium" selected>ปานกลาง - สมดุล</option>
+                        <option value="high">สูง - เน้นเติบโต</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">เงินเดือน (บาท)</label>
+                    <input type="number" id="ai-salary" class="form-control form-control-sm" value="30000" step="1000">
+                </div>
+                <button class="btn btn-primary btn-sm w-100 rounded-pill" onclick="getPortfolioAdvice()">
+                    <i class="bi bi-magic"></i> วิเคราะห์ด้วย AI
+                </button>
+                <div id="ai-portfolio-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retirement Projection -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:linear-gradient(135deg, #fefce8, #fef3c7); border-left:4px solid #eab308 !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:42px;height:42px;background:linear-gradient(135deg,#ca8a04,#eab308);"><i class="bi bi-graph-up-arrow"></i></div>
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#a16207;">Retirement Projection <span class="badge rounded-pill bg-secondary" style="font-size:0.55rem;"><i class="bi bi-calculator"></i> Algo</span> <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.55rem;"><i class="bi bi-robot"></i> AI</span></h6>
+                        <small class="text-muted">จำลองเงินเกษียณ Monte Carlo</small>
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="small text-muted">อายุปัจจุบัน</label>
+                        <input type="number" id="retire-age-now" class="form-control form-control-sm" value="35">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">อายุเกษียณ</label>
+                        <input type="number" id="retire-age-target" class="form-control form-control-sm" value="60">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">ผลตอบแทนคาดหวัง (%/ปี)</label>
+                    <input type="number" id="retire-return" class="form-control form-control-sm" value="6" step="0.5">
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">บำนาญที่ต้องการ (บาท/เดือน)</label>
+                    <input type="number" id="retire-pension" class="form-control form-control-sm" value="20000" step="1000">
+                </div>
+                <button class="btn btn-warning btn-sm w-100 rounded-pill text-dark" onclick="runRetirementProjection()">
+                    <i class="bi bi-calculator"></i> จำลอง Monte Carlo
+                </button>
+                <div id="retire-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scenario Analysis -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:linear-gradient(135deg, #fef2f2, #fee2e2); border-left:4px solid #ef4444 !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:42px;height:42px;background:linear-gradient(135deg,#dc2626,#ef4444);"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#b91c1c;">Scenario Analysis <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.55rem;"><i class="bi bi-robot"></i> AI</span></h6>
+                        <small class="text-muted">วิเคราะห์ผลกระทบวิกฤต</small>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">เลือกสถานการณ์</label>
+                    <select id="scenario-type" class="form-select form-select-sm">
+                        <option value="recession">📉 เศรษฐกิจถดถอย (Recession)</option>
+                        <option value="inflation">💹 เงินเฟ้อพุ่งสูง</option>
+                        <option value="war">⚔️ สงครามตะวันออกกลาง</option>
+                        <option value="tech_crash">💻 ฟองสบู่เทคฯ แตก</option>
+                        <option value="china_crisis">🇨🇳 วิกฤตจีน</option>
+                        <option value="fed_pivot">🏦 Fed ลดดอกเบี้ยเร็ว</option>
+                        <option value="gold_surge">🥇 ทองคำพุ่ง $3,000</option>
+                        <option value="baht_weak">💱 บาทอ่อนค่า 40฿/$</option>
+                        <option value="custom">✏️ กำหนดเอง...</option>
+                    </select>
+                </div>
+                <div class="mb-3" id="custom-scenario-wrap" style="display:none;">
+                    <label class="small text-muted">รายละเอียดสถานการณ์</label>
+                    <textarea id="custom-scenario" class="form-control form-control-sm" rows="2" placeholder="อธิบายสถานการณ์ที่ต้องการวิเคราะห์..."></textarea>
+                </div>
+                <button class="btn btn-danger btn-sm w-100 rounded-pill" onclick="runScenarioAnalysis()">
+                    <i class="bi bi-lightning-fill"></i> วิเคราะห์ผลกระทบ
+                </button>
+                <div id="scenario-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Research -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:linear-gradient(135deg, #f0fdf4, #dcfce7); border-left:4px solid #22c55e !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:42px;height:42px;background:linear-gradient(135deg,#16a34a,#22c55e);"><i class="bi bi-newspaper"></i></div>
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#15803d;">Daily AI Research <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.55rem;"><i class="bi bi-robot"></i> AI</span></h6>
+                        <small class="text-muted">รายงานวิจัยประจำวัน</small>
+                    </div>
+                </div>
+                <p class="small text-muted mb-3">AI รวบรวมข่าวและวิเคราะห์ตลาดให้อัตโนมัติทุกวัน พร้อมคำแนะนำสำหรับสมาชิก กบข.</p>
+                <button class="btn btn-success btn-sm w-100 rounded-pill" onclick="loadDailyResearch()">
+                    <i class="bi bi-file-earmark-text"></i> ดูรายงานวันนี้
+                </button>
+                <div id="research-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rebalance Check -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:linear-gradient(135deg, #faf5ff, #f3e8ff); border-left:4px solid #a855f7 !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:42px;height:42px;background:linear-gradient(135deg,#9333ea,#a855f7);"><i class="bi bi-arrow-repeat"></i></div>
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#7e22ce;">Rebalance Check <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.55rem;"><i class="bi bi-robot"></i> AI</span></h6>
+                        <small class="text-muted">ตรวจสอบการปรับสมดุลพอร์ต</small>
+                    </div>
+                </div>
+                <p class="small text-muted mb-3">วิเคราะห์ว่าพอร์ตปัจจุบันของคุณเบี่ยงเบนจากเป้าหมายหรือไม่ พร้อมคำแนะนำ</p>
+                <button class="btn rounded-pill btn-sm w-100 text-white" style="background:linear-gradient(135deg,#9333ea,#a855f7);" onclick="checkRebalance()">
+                    <i class="bi bi-clipboard-check"></i> ตรวจสอบพอร์ต
+                </button>
+                <div id="rebalance-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Q&A -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100" style="background:linear-gradient(135deg, #fff7ed, #ffedd5); border-left:4px solid #f97316 !important;">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width:42px;height:42px;background:linear-gradient(135deg,#ea580c,#f97316);"><i class="bi bi-chat-square-quote-fill"></i></div>
+                    <div>
+                        <h6 class="fw-bold mb-0" style="color:#c2410c;">Document Q&A <span class="badge rounded-pill bg-info text-dark" style="font-size:0.55rem;"><i class="bi bi-database"></i> RAG</span> <span class="badge rounded-pill text-white" style="background:linear-gradient(135deg, #8b5cf6, #a855f7); font-size:0.55rem;"><i class="bi bi-robot"></i> AI</span></h6>
+                        <small class="text-muted">ถาม-ตอบเกี่ยวกับ กบข.</small>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="small text-muted">พิมพ์คำถามเกี่ยวกับ กบข.</label>
+                    <input type="text" id="qa-question" class="form-control form-control-sm" placeholder="เช่น อัตราเงินสะสมเท่าไหร่?">
+                </div>
+                <button class="btn btn-sm w-100 rounded-pill text-white" style="background:linear-gradient(135deg,#ea580c,#f97316);" onclick="askDocumentQA()">
+                    <i class="bi bi-search"></i> ค้นหาคำตอบ
+                </button>
+                <div id="qa-result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ======= ROADMAP ======= -->
 <h4 class="stitle"><i class="bi bi-signpost-split-fill"></i> แผนการลงทุนสำหรับอนาคต</h4>
 <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -1157,6 +3069,17 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
     <p class="small mb-0"><strong>แนะนำ:</strong> แผนเชิงรุก 65 หรือ แผนตราสารทุนไทย+โลก เพื่อ Compound Growth</p>
    </div></div>
   </div>
+  
+  <div class="mt-4 p-3 rounded-3" style="background:#f0e6ff; border:1px solid #d8b4fe; display:none;" id="ai-roadmap-insight">
+   <div class="d-flex align-items-start gap-2">
+     <i class="bi bi-stars text-purple fs-5 mt-1" style="color:#7e22ce"></i>
+     <div>
+       <strong style="color:#6b21a8">มุมมองระยะยาวจาก AI:</strong>
+       <span class="text-dark d-block mt-1" id="out-long-term-insight">กำลังวิเคราะห์ข้อมูล...</span>
+     </div>
+   </div>
+  </div>
+
  </div>
 </div>
 
@@ -1390,6 +3313,46 @@ function renderReitTable(reits) {
     '</table>';
 }
 
+// ── Logic for Fear & Greed Gauge ──────────────
+document.addEventListener('DOMContentLoaded', function() {
+    var fgDataObj = document.getElementById('fg-data');
+    if (fgDataObj) {
+        var rawText = fgDataObj.innerText;
+        // Try to extract a number from the text
+        var match = rawText.match(/(\d+)/);
+        var score = 50; // Default Neutral
+        if (match) {
+            score = parseInt(match[1]);
+            // Ensure bounds
+            if (score < 0) score = 0;
+            if (score > 100) score = 100;
+        }
+        
+        // Update pointer position
+        var pointer = document.getElementById('fg-pointer');
+        if (pointer) {
+            pointer.style.left = score + '%';
+        }
+        
+        // Update text description based on score
+        var textEl = document.getElementById('fg-text');
+        var badgeEl = document.getElementById('fg-badge');
+        if (textEl && badgeEl) {
+            var label = "Neutral";
+            var colorClass = "text-warning";
+            var bgClass = "bg-warning";
+            if (score < 25) { label = "Extreme Fear"; colorClass = "text-danger"; bgClass = "bg-danger"; }
+            else if (score < 45) { label = "Fear"; colorClass = "text-danger"; bgClass = "bg-danger"; }
+            else if (score > 75) { label = "Extreme Greed"; colorClass = "text-success"; bgClass = "bg-success"; }
+            else if (score > 55) { label = "Greed"; colorClass = "text-success"; bgClass = "bg-success"; }
+            
+            textEl.innerHTML = '<strong class="' + colorClass + ' fs-6">' + score + ' - ' + label + '</strong> <br><span class="opacity-75" style="font-size:0.65rem;">' + rawText + '</span>';
+            badgeEl.className = 'badge ' + bgClass;
+            badgeEl.innerText = score + ' ' + label;
+        }
+    }
+});
+
 // ── News API Pagination ──────────────
 var currentNewsPage = 1;
 
@@ -1448,10 +3411,418 @@ function renderNews(items, isFirstPage) {
   container.insertAdjacentHTML('beforeend', html);
 }
 
+// ── AI Outlook Fetching ──────────────
+function loadMarketOutlook() {
+  fetch('/api/outlook')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('out-date').innerText = data.date;
+      document.getElementById('out-global').innerText = data.global_economy;
+      document.getElementById('out-thai').innerText = data.thai_economy;
+      document.getElementById('out-gold').innerText = data.gold_view;
+      document.getElementById('out-strategy').innerText = data.strategy;
+      if (data.is_ai) {
+          document.getElementById('out-ai-badge').style.display = 'inline-block';
+          
+          if(data.academy_tip) {
+             document.getElementById('out-academy-tip').innerText = data.academy_tip;
+             document.getElementById('ai-academy-tip').style.display = 'block';
+          }
+          if(data.long_term_insight) {
+             document.getElementById('out-long-term-insight').innerText = data.long_term_insight;
+             document.getElementById('ai-roadmap-insight').style.display = 'block';
+          }
+      }
+    })
+    .catch(e => console.error("Error fetching AI outlook", e));
+}
+
+function runSimulation() {
+    const input = document.getElementById('sim-input').value.trim();
+    if(!input) return;
+    
+    const btn = document.getElementById('sim-btn');
+    const resBox = document.getElementById('sim-result');
+    const spinner = document.getElementById('sim-spinner');
+    const content = document.getElementById('sim-content');
+    
+    btn.disabled = true;
+    resBox.style.display = 'block';
+    spinner.style.display = 'block';
+    content.style.display = 'none';
+    
+    fetch('/api/simulate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({scenario: input})
+    })
+    .then(r => r.json())
+    .then(data => {
+        spinner.style.display = 'none';
+        content.style.display = 'block';
+        btn.disabled = false;
+        
+        if(data.error) {
+             document.getElementById('sim-scenario-text').innerText = "เกิดข้อผิดพลาด";
+             document.getElementById('sim-reasoning').innerText = data.error;
+             return;
+        }
+        
+        document.getElementById('sim-scenario-text').innerText = "สถานการณ์: " + data.scenario;
+        document.getElementById('sim-reasoning').innerText = data.reasoning;
+        
+        const pctEl = document.getElementById('sim-pct');
+        pctEl.innerText = (data.total_impact_pct > 0 ? "+" : "") + data.total_impact_pct + "%";
+        pctEl.className = data.total_impact_pct > 0 ? "mb-0 fw-bold val-pos" : "mb-0 fw-bold val-neg";
+        
+        document.getElementById('sim-new-bal').innerText = data.new_balance_thb.toLocaleString() + " B";
+        
+        const lossEl = document.getElementById('sim-loss');
+        lossEl.innerText = (data.est_loss_thb > 0 ? "+" : "") + data.est_loss_thb.toLocaleString() + " B";
+        lossEl.className = data.est_loss_thb > 0 ? "mb-0 fw-bold val-pos" : "mb-0 fw-bold val-neg";
+    })
+    .catch(e => {
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        console.error("Simulation error", e);
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// AI Hub Functions
+// ══════════════════════════════════════════════════════════════════════════
+
+// Show/hide custom scenario input
+document.addEventListener('change', function(e) {
+    if(e.target && e.target.id === 'scenario-type') {
+        const wrap = document.getElementById('custom-scenario-wrap');
+        wrap.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    }
+});
+
+// AI Portfolio Advisor
+function getPortfolioAdvice() {
+    const age = document.getElementById('ai-age').value;
+    const risk = document.getElementById('ai-risk').value;
+    const salary = document.getElementById('ai-salary').value;
+    const resultDiv = document.getElementById('ai-portfolio-result');
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm text-primary"></div> กำลังวิเคราะห์...</div>';
+    resultDiv.style.display = 'block';
+
+    fetch('/api/ai/portfolio-advice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            age: parseInt(age),
+            years_to_retire: 60 - parseInt(age),
+            risk_tolerance: risk,
+            monthly_salary: parseInt(salary)
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.error) {
+            resultDiv.innerHTML = '<div class="alert alert-danger small py-2">' + data.error + '</div>';
+            return;
+        }
+
+        let allocHtml = '<div class="small">';
+        allocHtml += '<div class="fw-bold text-primary mb-2">📊 แนะนำการจัดสัดส่วน:</div>';
+
+        if(data.recommended_allocation) {
+            data.recommended_allocation.forEach(a => {
+                allocHtml += '<div class="d-flex justify-content-between align-items-center mb-1">';
+                allocHtml += '<span>' + a.plan_name + '</span>';
+                allocHtml += '<span class="badge bg-primary">' + a.percentage + '%</span>';
+                allocHtml += '</div>';
+                allocHtml += '<div class="progress mb-2" style="height:6px;">';
+                allocHtml += '<div class="progress-bar" style="width:' + a.percentage + '%"></div></div>';
+            });
+        }
+
+        allocHtml += '<div class="mt-2 p-2 rounded" style="background:#e0f2fe;">';
+        allocHtml += '<div class="fw-bold">📈 ผลตอบแทนคาดหวัง: ' + (data.expected_return_yearly || 'N/A') + '%/ปี</div>';
+        allocHtml += '<div class="text-muted small">' + (data.summary || '') + '</div>';
+        allocHtml += '</div></div>';
+
+        resultDiv.innerHTML = allocHtml;
+    })
+    .catch(e => {
+        console.error(e);
+        resultDiv.innerHTML = '<div class="alert alert-danger small py-2">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
+// Retirement Projection
+function runRetirementProjection() {
+    const ageNow = document.getElementById('retire-age-now').value;
+    const ageTarget = document.getElementById('retire-age-target').value;
+    const expectedReturn = document.getElementById('retire-return').value;
+    const pension = document.getElementById('retire-pension').value;
+    const resultDiv = document.getElementById('retire-result');
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm text-warning"></div> กำลังจำลอง 1,000 รอบ...</div>';
+    resultDiv.style.display = 'block';
+
+    fetch('/api/ai/retirement-projection', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            current_age: parseInt(ageNow),
+            retirement_age: parseInt(ageTarget),
+            expected_return: parseFloat(expectedReturn),
+            desired_monthly_pension: parseInt(pension)
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.error) {
+            resultDiv.innerHTML = '<div class="alert alert-danger small py-2">' + data.error + '</div>';
+            return;
+        }
+
+        const sim = data.simulation || {};
+        let html = '<div class="small">';
+        html += '<div class="fw-bold text-warning mb-2">📊 ผลการจำลอง Monte Carlo:</div>';
+        html += '<table class="table table-sm mb-2" style="font-size:0.75rem;">';
+        html += '<tr><td>กรณีแย่ (10%)</td><td class="text-end text-danger fw-bold">' + (sim.percentile_10 || 0).toLocaleString() + ' บ.</td></tr>';
+        html += '<tr><td>กรณีปกติ (50%)</td><td class="text-end text-primary fw-bold">' + (sim.percentile_50 || 0).toLocaleString() + ' บ.</td></tr>';
+        html += '<tr><td>กรณีดี (90%)</td><td class="text-end text-success fw-bold">' + (sim.percentile_90 || 0).toLocaleString() + ' บ.</td></tr>';
+        html += '</table>';
+
+        if(data.ai_interpretation) {
+            const ai = data.ai_interpretation;
+            html += '<div class="p-2 rounded" style="background:#fef3c7;">';
+            html += '<div class="fw-bold">🤖 AI วิเคราะห์: ' + (ai.goal_achievement || '') + '</div>';
+            html += '<div class="text-muted small">' + (ai.interpretation || '') + '</div>';
+            if(ai.recommendations && ai.recommendations.length > 0) {
+                html += '<div class="mt-1 small">💡 ' + ai.recommendations[0] + '</div>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    })
+    .catch(e => {
+        console.error(e);
+        resultDiv.innerHTML = '<div class="alert alert-danger small py-2">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
+// Scenario Analysis
+function runScenarioAnalysis() {
+    const scenarioType = document.getElementById('scenario-type').value;
+    const customScenario = document.getElementById('custom-scenario').value;
+    const resultDiv = document.getElementById('scenario-result');
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm text-danger"></div> กำลังวิเคราะห์...</div>';
+    resultDiv.style.display = 'block';
+
+    fetch('/api/ai/scenario-analysis', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            scenario_type: scenarioType,
+            custom_scenario: customScenario
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.error) {
+            resultDiv.innerHTML = '<div class="alert alert-danger small py-2">' + data.error + '</div>';
+            return;
+        }
+
+        const impact = data.portfolio_impact || {};
+        let html = '<div class="small">';
+        html += '<div class="fw-bold text-danger mb-2">⚠️ ผลกระทบต่อพอร์ต:</div>';
+
+        const impactPct = impact.total_impact_pct || 0;
+        const impactClass = impactPct >= 0 ? 'text-success' : 'text-danger';
+        html += '<div class="text-center mb-2">';
+        html += '<div class="' + impactClass + ' fw-bold" style="font-size:1.5rem;">' + (impactPct > 0 ? '+' : '') + impactPct + '%</div>';
+        html += '<div class="text-muted small">ผลกระทบโดยรวม</div>';
+        html += '</div>';
+
+        if(data.impact_by_asset) {
+            html += '<div class="mb-2">';
+            data.impact_by_asset.forEach(a => {
+                const pct = a.impact_pct || 0;
+                const cls = pct >= 0 ? 'bg-success' : 'bg-danger';
+                html += '<div class="d-flex justify-content-between small">';
+                html += '<span>' + a.asset + '</span>';
+                html += '<span class="badge ' + cls + '">' + (pct > 0 ? '+' : '') + pct + '%</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        if(data.recovery_outlook) {
+            html += '<div class="p-2 rounded" style="background:#fee2e2;">';
+            html += '<div class="small">📈 <b>แนวโน้มฟื้นตัว:</b> ' + data.recovery_outlook + '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    })
+    .catch(e => {
+        console.error(e);
+        resultDiv.innerHTML = '<div class="alert alert-danger small py-2">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
+// Daily Research
+function loadDailyResearch() {
+    const resultDiv = document.getElementById('research-result');
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm text-success"></div> กำลังโหลดรายงาน...</div>';
+    resultDiv.style.display = 'block';
+
+    fetch('/api/ai/daily-research')
+    .then(r => r.json())
+    .then(data => {
+        if(data.error) {
+            resultDiv.innerHTML = '<div class="alert alert-danger small py-2">' + data.error + '</div>';
+            return;
+        }
+
+        let html = '<div class="small">';
+        html += '<div class="fw-bold text-success mb-2">📰 ' + (data.report_date || 'รายงานวันนี้') + '</div>';
+        html += '<div class="mb-2">' + (data.market_summary || '') + '</div>';
+
+        if(data.asset_outlook) {
+            html += '<div class="mb-2">';
+            const outlook = data.asset_outlook;
+            const trendIcon = {'bullish': '🟢', 'neutral': '🟡', 'bearish': '🔴'};
+
+            if(outlook.thai_equity) html += '<div>' + (trendIcon[outlook.thai_equity.trend] || '⚪') + ' หุ้นไทย: ' + (outlook.thai_equity.reason || '') + '</div>';
+            if(outlook.intl_equity) html += '<div>' + (trendIcon[outlook.intl_equity.trend] || '⚪') + ' หุ้นโลก: ' + (outlook.intl_equity.reason || '') + '</div>';
+            if(outlook.gold) html += '<div>' + (trendIcon[outlook.gold.trend] || '⚪') + ' ทองคำ: ' + (outlook.gold.reason || '') + '</div>';
+            html += '</div>';
+        }
+
+        if(data.gpf_recommendation) {
+            html += '<div class="p-2 rounded" style="background:#dcfce7;">';
+            html += '<div class="small">💡 <b>คำแนะนำ:</b> ' + data.gpf_recommendation + '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    })
+    .catch(e => {
+        console.error(e);
+        resultDiv.innerHTML = '<div class="alert alert-danger small py-2">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
+// Rebalance Check
+function checkRebalance() {
+    const resultDiv = document.getElementById('rebalance-result');
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" style="color:#9333ea;"></div> กำลังวิเคราะห์...</div>';
+    resultDiv.style.display = 'block';
+
+    fetch('/api/ai/rebalance-check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({threshold: 5})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.error) {
+            resultDiv.innerHTML = '<div class="alert alert-danger small py-2">' + data.error + '</div>';
+            return;
+        }
+
+        let html = '<div class="small">';
+
+        if(data.needs_rebalance) {
+            html += '<div class="alert alert-warning py-2 mb-2">⚠️ <b>ควร Rebalance</b></div>';
+        } else {
+            html += '<div class="alert alert-success py-2 mb-2">✅ <b>พอร์ตสมดุลดี</b></div>';
+        }
+
+        if(data.overall_risk_level) {
+            html += '<div class="mb-2">ระดับความเสี่ยงรวม: <b>' + data.overall_risk_level + '</b></div>';
+        }
+
+        if(data.rebalance_actions && data.rebalance_actions.length > 0) {
+            html += '<div class="fw-bold mb-1">📋 คำแนะนำ:</div>';
+            data.rebalance_actions.forEach(a => {
+                html += '<div class="small text-muted">• ' + a.from_plan + ' → ' + a.to_plan + ' (' + a.amount_pct + '%)</div>';
+            });
+        }
+
+        if(data.market_timing_note) {
+            html += '<div class="mt-2 p-2 rounded" style="background:#f3e8ff;">';
+            html += '<div class="small">⏰ ' + data.market_timing_note + '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    })
+    .catch(e => {
+        console.error(e);
+        resultDiv.innerHTML = '<div class="alert alert-danger small py-2">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
+// Document Q&A
+function askDocumentQA() {
+    const question = document.getElementById('qa-question').value.trim();
+    if(!question) return;
+
+    const resultDiv = document.getElementById('qa-result');
+
+    resultDiv.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm" style="color:#f97316;"></div> กำลังค้นหา...</div>';
+    resultDiv.style.display = 'block';
+
+    fetch('/api/ai/document-qa', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question: question})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.error) {
+            resultDiv.innerHTML = '<div class="alert alert-danger small py-2">' + data.error + '</div>';
+            return;
+        }
+
+        let html = '<div class="small">';
+        html += '<div class="p-2 rounded mb-2" style="background:#fff7ed;">';
+        html += '<div class="fw-bold mb-1" style="color:#c2410c;">💬 คำตอบ:</div>';
+        html += '<div>' + (data.answer || 'ไม่พบคำตอบ') + '</div>';
+        html += '</div>';
+
+        if(data.confidence) {
+            const confColor = data.confidence === 'high' ? 'success' : data.confidence === 'medium' ? 'warning' : 'danger';
+            html += '<div class="small text-muted">ความมั่นใจ: <span class="badge bg-' + confColor + '">' + data.confidence + '</span></div>';
+        }
+
+        if(data.related_topics && data.related_topics.length > 0) {
+            html += '<div class="mt-2 small text-muted">หัวข้อที่เกี่ยวข้อง: ' + data.related_topics.join(', ') + '</div>';
+        }
+        html += '</div>';
+
+        resultDiv.innerHTML = html;
+    })
+    .catch(e => {
+        console.error(e);
+        resultDiv.innerHTML = '<div class="alert alert-danger small py-2">เกิดข้อผิดพลาด กรุณาลองใหม่</div>';
+    });
+}
+
 // Auto-load on page ready
 document.addEventListener('DOMContentLoaded', function() {
     loadSetData();
     loadMoreNews();
+    loadMarketOutlook();
 });
 </script>
 <!-- ======= AI CHATBOT WIDGET ======= -->
@@ -1464,8 +3835,8 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-robot fs-4"></i>
                 <div class="lh-1">
-                    <h6 class="mb-1 fw-bold text-white">น้อง กบข. AI</h6>
-                    <small class="text-white-50" style="font-size:0.75rem;">ผู้ช่วยส่วนตัว พร้อมให้คำแนะนำ</small>
+                    <h6 class="mb-1 fw-bold text-white">น้อง กบข. AI <span class="badge rounded-pill" style="font-size:0.5rem; background:rgba(255,255,255,0.2);">Gemini</span></h6>
+                    <small class="text-white-50" style="font-size:0.75rem;"><i class="bi bi-cpu"></i> Powered by AI + RAG</small>
                 </div>
             </div>
             <button class="btn btn-sm btn-link text-white p-0" onclick="toggleChat()">
@@ -1500,31 +3871,58 @@ document.addEventListener('DOMContentLoaded', function() {
 @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
 </style>
 <script>
+let chatHistory = [];
+
 function toggleChat() {
     const w = document.getElementById('chat-window');
     w.style.display = w.style.display === 'none' ? 'flex' : 'none';
     if(w.style.display === 'flex') document.getElementById('chat-input').focus();
 }
+
 function sendPrompt(text) {
     document.getElementById('chat-input').value = text;
     sendMessage();
 }
+
 function sendMessage() {
     const input = document.getElementById('chat-input');
     const msg = input.value.trim();
     if(!msg) return;
+    
     appendMessage(msg, 'user');
+    chatHistory.push({role: "user", parts: msg});
     input.value = '';
-    setTimeout(() => {
-        let reply = "ขออภัยครับ ตอนนี้ผมเป็นเพียงระบบ Demo ที่มาพร้อม UI ให้เห็นภาพรวม พร้อมรอการเชื่อมต่อกับ AI API เต็มรูปแบบ (เช่น OpenAI หรือ Gemini) ในอนาคต แต่คุณสามารถอ่านข้อมูลพื้นฐานได้จาก <b>ศูนย์จัดระดับความรู้ กบข.</b> บนหน้าเว็บเลยครับ!";
-        if(msg.includes('30') || msg.includes('วัยรุ่น')) {
-            reply = "สำหรับช่วงอายุ 30 ปี ซึ่งมีระยะเวลาลงทุนอีกยาวนาน (25-30 ปี) แนะนำให้เน้น <b>แผนตราสารทุนไทย/ต่างประเทศ</b> หรือ <b>แผนเชิงรุก 65</b> ครับ เพราะสามารถก้าวข้ามความผันผวนระยะสั้นเพื่อเป้าหมายผลตอบแทนที่สูงขึ้นในระยะยาวได้ครับ 📈";
-        } else if(msg.includes('ผลตอบแทน') || msg.includes('สูงสุด')) {
-            reply = "จากข้อมูล 3 ปีย้อนหลังล่าสุด <b>แผนหุ้นต่างประเทศ 95% + แผนหลัก 5%</b> ให้ผลตอบแทนเฉลี่ยสูงที่สุดครับ (ประมาณ 14.03% ต่อปี) แต่ก็มีความเสี่ยงจากอัตราแลกเปลี่ยนและความผันผวนของตลาดโลกด้วยนะครับ";
-        }
-        appendMessage(reply, 'bot');
-    }, 800);
+    
+    // Add loading indicator
+    const loadingId = 'loading-' + Date.now();
+    const chatMsgs = document.getElementById('chat-messages');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = loadingId;
+    loadingDiv.className = "d-flex gap-2 mb-3";
+    loadingDiv.innerHTML = `<div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:30px;height:30px;"><i class="bi bi-robot small"></i></div>
+        <div class="bg-white p-2 px-3 rounded-3 shadow-sm text-dark align-self-start" style="max-width:85%; font-size:0.9rem;"><div class="spinner-grow spinner-grow-sm text-primary" role="status"></div> กำลังพิมพ์...</div>`;
+    chatMsgs.appendChild(loadingDiv);
+    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg, history: chatHistory.slice(0, -1)}) // send history excluding current msg
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById(loadingId).remove();
+        let reply = data.reply || "ขออภัยครับ เกิดข้อผิดพลาดในการเชื่อมต่อ";
+        appendMessage(reply, 'model');
+        chatHistory.push({role: "model", parts: reply});
+    })
+    .catch(e => {
+        console.error(e);
+        document.getElementById(loadingId).remove();
+        appendMessage("ขออภัยครับ ระบบประมวลผล AI ขัดข้องชั่วคราว ลองใหม่อีกครั้งนะครับ", 'model');
+    });
 }
+
 function appendMessage(text, sender) {
     const chatMsgs = document.getElementById('chat-messages');
     const div = document.createElement('div');
@@ -1532,8 +3930,10 @@ function appendMessage(text, sender) {
     if(sender === 'user') {
         div.innerHTML = `<div class="bg-primary text-white p-2 px-3 rounded-3 shadow-sm align-self-end" style="max-width:85%; font-size:0.9rem;">${text}</div>`;
     } else {
+        // Simple markdown parsing for bold text
+        const formattedText = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
         div.innerHTML = `<div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:30px;height:30px;"><i class="bi bi-robot small"></i></div>
-            <div class="bg-white p-2 px-3 rounded-3 shadow-sm text-dark align-self-start" style="max-width:85%; font-size:0.9rem;">${text}</div>`;
+            <div class="bg-white p-2 px-3 rounded-3 shadow-sm text-dark align-self-start" style="max-width:85%; font-size:0.9rem;">${formattedText}</div>`;
     }
     chatMsgs.appendChild(div);
     chatMsgs.scrollTop = chatMsgs.scrollHeight;
@@ -1564,6 +3964,23 @@ def index():
     cur_vol = round((vol_i**2 + vol_g**2 + 2 * (-0.05) * vol_i * vol_g) ** 0.5, 2)
     diff_latest = round(best["latest"] - cur_latest, 2)
 
+    # Determine UI momentum action flag
+    momentum = get_asset_momentum()
+    intl_mom = momentum.get("equity_intl", 0)
+    thai_mom = momentum.get("equity_thai", 0)
+    gold_mom = momentum.get("gold", 0)
+    
+    action_required = False
+    action_msg = ""
+    # Current portfolio holds 75% intl, 25% gold. 
+    # If intl momentum is negative and we recommend something else.
+    if intl_mom < -1.5 and best["f1"]["id"] != "equity_intl" and best["f2"]["id"] != "equity_intl":
+        action_required = True
+        action_msg = "ระบบตรวจพบโมเมนตัม 'ขาลง' (Downtrend) ใน แผนหุ้นต่างประเทศ แนะนำพิจารณาสับเปลี่ยนไปยังแผนตราสารหนี้ หรือแผนที่มีความเสี่ยงต่ำกว่าเพื่อหลบภัยชั่วคราว"
+    elif best["metric"] > 60 and diff_latest > 2.0:
+        action_required = True
+        action_msg = f"แผนแนะนำมีแนวโน้มสร้างผลตอบแทนเหนือกว่าพอร์ตปัจจุบันอย่างชัดเจน (+{diff_latest}%) หนุนโดยโมเมนตัมตลาดเชิงบวก แนะนำให้พิจารณาปรับสัดส่วน"
+
     return render_template_string(
         HTML,
         funds=scored,
@@ -1578,6 +3995,8 @@ def index():
         cur_annual=cur_annual,
         cur_vol=cur_vol,
         diff_latest=diff_latest,
+        action_required=action_required,
+        action_msg=action_msg
     )
 
 
