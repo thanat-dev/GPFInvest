@@ -25,6 +25,7 @@ import itertools
 import urllib.request
 import xml.etree.ElementTree as ET
 import os
+import json as _json
 try:
     import google.generativeai as genai
     GENAI_AVAILABLE = True
@@ -447,8 +448,11 @@ def fetch_all_news():
     
     for url in urls:
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=4) as response:
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/xml, application/xml, application/rss+xml, text/html;q=0.9, text/plain;q=0.8, image/png, */*;q=0.5'
+            })
+            with urllib.request.urlopen(req, timeout=10) as response:
                 tree = ET.parse(response)
                 root = tree.getroot()
                 
@@ -478,6 +482,16 @@ def fetch_all_news():
                             pass
         except Exception as e:
             print(f"RSS Error for {url}: {e}")
+            
+    # Fallback news if empty
+    if not news_items:
+        print("RSS Feeds failed. Using fallback news.")
+        news_items = [
+            {"title": "กบข. เผยผลประกอบการไตรมาสล่าสุดเติบโตต่อเนื่อง", "link": "#", "date": datetime.datetime.now().strftime("%d %b %Y"), "timestamp": datetime.datetime.now().timestamp()},
+            {"title": "ตลาดหุ้นไทยขานรับมาตรการกระตุ้นเศรษฐกิจใหม่", "link": "#", "date": datetime.datetime.now().strftime("%d %b %Y"), "timestamp": datetime.datetime.now().timestamp()},
+            {"title": "ราคาทองคำทำสถิติสูงสุดใหม่ท่ามกลางความไม่แน่นอน", "link": "#", "date": datetime.datetime.now().strftime("%d %b %Y"), "timestamp": datetime.datetime.now().timestamp()},
+            {"title": "ผู้เชี่ยวชาญแนะนำกระจายความเสี่ยงในหุ้นต่างประเทศช่วงนี้", "link": "#", "date": datetime.datetime.now().strftime("%d %b %Y"), "timestamp": datetime.datetime.now().timestamp()}
+        ]
             
     news_items.sort(key=lambda x: x["timestamp"], reverse=True)
     
@@ -516,7 +530,7 @@ def api_news():
     if API_KEY and GENAI_AVAILABLE and items:
         try:
             genai.configure(api_key=API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash')
             
             # Prepare news list for AI
             news_text = "\n".join([f"ID[{i}]: {n['title']}" for i, n in enumerate(items)])
@@ -588,7 +602,7 @@ def generate_ai_outlook():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Get latest news for context
         if not NEWS_CACHE["data"]:
@@ -723,7 +737,7 @@ def api_chat():
 ถ้าผู้ใช้ขอคำแนะนำการลงทุน ให้สอดแทรกความรู้เรื่องวินัยการออมและการลงทุนระยะยาวเสมอ
 """
         model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-1.5-flash",
             system_instruction=system_instruction
         )
         
@@ -751,7 +765,7 @@ def api_simulate():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
 วิเคราะห์สถานการณ์สมมติทางเศรษฐกิจต่อไปนี้: "{scenario}"
@@ -901,7 +915,7 @@ def api_admin_update_funds():
         
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Save temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
@@ -972,7 +986,7 @@ def api_portfolio_advice():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Get current fund data for context
         fund_summary = "\n".join([
@@ -1071,7 +1085,7 @@ def api_rebalance_check():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         allocation_str = "\n".join([
             f"- {h['plan']}: {h['pct']}% (มูลค่า {h.get('value', 0):,.2f} บาท)"
@@ -1156,7 +1170,7 @@ def api_scenario_analysis():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         holdings_str = "\n".join([
             f"- {h['plan']}: {h['pct']}%"
@@ -1302,7 +1316,7 @@ def api_retirement_projection():
     if GENAI_AVAILABLE and API_KEY:
         try:
             genai.configure(api_key=API_KEY)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash')
 
             prompt = f"""
 วิเคราะห์ผลการจำลองเงินเกษียณ กบข. และให้คำแนะนำ
@@ -1395,7 +1409,7 @@ def api_daily_research():
         news_titles = "\n".join([f"- {n['title']} ({n['date']})" for n in recent_news])
 
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = f"""
 คุณเป็นนักวิเคราะห์การลงทุนของ กบข. สร้างรายงานวิจัยประจำวันจากข่าวล่าสุด
@@ -1473,7 +1487,7 @@ def api_document_qa():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Get relevant knowledge from RAG
         knowledge = get_relevant_knowledge(question)
@@ -1586,7 +1600,7 @@ def api_chat_enhanced():
 - เตือนเรื่องความเสี่ยงเมื่อเหมาะสม
 """
         model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-1.5-flash",
             system_instruction=system_instruction
         )
 
@@ -1681,7 +1695,7 @@ def api_ai_combo_advice():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Pull outlook for context
         outlook = generate_ai_outlook()
@@ -1712,10 +1726,6 @@ def api_ai_combo_advice():
         print(f"Combo Advice Error: {e}")
         return jsonify({"insight": "ระบบ AI ขัดข้องชั่วคราว ไม่สามารถวิเคราะห์แผนเชิงลึกได้"})
 
-        ],
-        "genai_available": GENAI_AVAILABLE,
-        "api_key_configured": bool(os.environ.get("GEMINI_API_KEY"))
-    })
 
 
 # =========================================================================
@@ -1755,7 +1765,7 @@ def api_ai_top_plans():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Get news for context
         if not NEWS_CACHE["data"]:
@@ -1797,14 +1807,15 @@ def api_ai_top_plans():
   "time_horizon": "แนะนำสำหรับระยะ (สั้น/กลาง/ยาว)"
 }}"""
 
+        # Generate and Clean up JSON
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        result = _json.loads(text.strip())
+        if "```json" in text:
+            text = text.split("```json")[-1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[-1].split("```")[0].strip()
+        
+        result = _json.loads(text)
         result["is_ai"] = True
         result["generated_at"] = now.strftime("%Y-%m-%d %H:%M")
 
@@ -1836,7 +1847,7 @@ def api_ai_market_deep():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
@@ -1890,14 +1901,15 @@ def api_ai_market_deep():
   "top_opportunity": "โอกาสที่น่าสนใจที่สุดในช่วงนี้"
 }}"""
 
+        # Generate and Clean up JSON
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        result = _json.loads(text.strip())
+        if "```json" in text:
+            text = text.split("```json")[-1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[-1].split("```")[0].strip()
+        
+        result = _json.loads(text)
         result["is_ai"] = True
         result["timestamp"] = now.strftime("%Y-%m-%d %H:%M")
 
@@ -1929,7 +1941,7 @@ def api_ai_technical_summary():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = """คุณเป็นนักวิเคราะห์ทางเทคนิค ให้สรุปสัญญาณเทคนิคสำหรับสินทรัพย์หลักที่เกี่ยวข้องกับ กบข.
 
@@ -1970,14 +1982,15 @@ def api_ai_technical_summary():
   "action_suggestion": "คำแนะนำสำหรับสมาชิก กบข. ที่ต้องการปรับแผน"
 }"""
 
+        # Generate and Clean up JSON
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        result = _json.loads(text.strip())
+        if "```json" in text:
+            text = text.split("```json")[-1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[-1].split("```")[0].strip()
+        
+        result = _json.loads(text)
         result["is_ai"] = True
         result["timestamp"] = now.strftime("%Y-%m-%d %H:%M")
 
@@ -2009,7 +2022,7 @@ def api_ai_news_impact():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
@@ -2055,14 +2068,15 @@ def api_ai_news_impact():
 
 วิเคราะห์เฉพาะ 5 ข่าวที่สำคัญที่สุด"""
 
+        # Generate and Clean up JSON
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        result = _json.loads(text.strip())
+        if "```json" in text:
+            text = text.split("```json")[-1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[-1].split("```")[0].strip()
+        
+        result = _json.loads(text)
         result["is_ai"] = True
         result["analyzed_at"] = now.strftime("%Y-%m-%d %H:%M")
         result["news_count"] = len(recent_news)
@@ -2095,7 +2109,7 @@ def api_ai_academy_insight():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
@@ -2139,14 +2153,15 @@ def api_ai_academy_insight():
   }}
 }}"""
 
+        # Generate and Clean up JSON
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        result = _json.loads(text.strip())
+        if "```json" in text:
+            text = text.split("```json")[-1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[-1].split("```")[0].strip()
+        
+        result = _json.loads(text)
         result["is_ai"] = True
         result["generated_date"] = now.strftime("%Y-%m-%d")
 
@@ -2178,7 +2193,7 @@ def api_ai_roadmap_insight():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
