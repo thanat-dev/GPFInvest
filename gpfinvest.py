@@ -2719,11 +2719,24 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
       <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
       {
         "symbols": [
-          {"proName":"OANDA:XAUUSD",    "title":"🥇 ทองคำ XAUUSD · แผนทองคำ กบข."},
-          {"proName":"SP:SPX", "title":"🌍 S&P500 · ตราสารทุนโลก (พัฒนาแล้ว) 65%"},
-          {"proName":"FOREXCOM:NSXUSD", "title":"🚀 Nasdaq100 · ตราสารทุนโลก (เทค/เกิดใหม่) 35%"},
-          {"proName":"TVC:US10Y",       "title":"📄 US10Y Yield · ตราสารหนี้โลก (ภาครัฐ) 70%"},
-          {"proName":"OANDA:USDTHB",    "title":"🇹🇭 USD/THB · อัตราแลกเปลี่ยน (กระทบแผนต่างประเทศ)"}
+          {"proName":"CBOE:VIX", "title":"ความผันผวนตลาดโลก (กระทบแผนหุ้นต่างประเทศ/แผนสมดุลตามอายุ)"},
+          {"proName":"SP:SPX", "title":"แผนหุ้นต่างประเทศ (ตราสารทุนโลกพัฒนาแล้ว)"},
+          {"proName":"FOREXCOM:NSXUSD", "title":"แผนหุ้นต่างประเทศ (กลุ่มเทคโนโลยี)"},
+          {"proName":"TVC:DJI", "title":"แผนหุ้นต่างประเทศ"},
+          {"proName":"SET:SET", "title":"แผนหุ้นไทย"},
+          {"proName":"SET:SET50", "title":"แผนหุ้นไทย (หุ้นขนาดใหญ่)"},
+          {"proName":"SET:MAI", "title":"แผนหุ้นไทย (หุ้นขนาดกลาง-เล็ก)"},
+          {"proName":"NASDAQ:AAPL", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"NASDAQ:MSFT", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"NASDAQ:NVDA", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"NASDAQ:GOOGL", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"NASDAQ:AMZN", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"NASDAQ:META", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"NASDAQ:TSLA", "title":"แผนหุ้นต่างประเทศ (Top Holdings)"},
+          {"proName":"OANDA:XAUUSD", "title":"แผนทองคำ"},
+          {"proName":"OANDA:USDTHB", "title":"อัตราแลกเปลี่ยน (กระทบทุกแผนต่างประเทศ)"},
+          {"proName":"TVC:US10Y", "title":"แผนตราสารหนี้ต่างประเทศ"},
+          {"proName":"TVC:TH10Y", "title":"แผนตราสารหนี้ไทย"}
         ],
         "showSymbolLogo": true,
         "isTransparent": false,
@@ -2783,37 +2796,97 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
     <h6 class="fw-bold mb-3"><i class="bi bi-graph-up"></i> กราฟราคา Interactive — สินทรัพย์หลัก กบข.</h6>
     <div class="row g-3">
 
+      <!-- หุ้นต่างประเทศ S&P 500 -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#eff6ff;border-bottom:2px solid #1d4ed8">
+            <span class="badge rounded-pill" style="background:#1d4ed8">แผนหุ้นต่างประเทศ</span>
+            <span class="fw-bold small">🌍 S&P 500</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%">
+            <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
+            {"symbols":[["S&P 500","SP:SPX|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"area","maLineColor":"#1d4ed8","maLineWidth":1,"maLength":20,"dateRanges":["1d|1","1m|30","3m|60","12m|1D","all|1M"]}
+            </script>
+          </div>
+        </div>
+      </div>
+      
+      <!-- หุ้นไทย SET -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#f8fafc;border-bottom:2px solid #334155">
+            <span class="badge rounded-pill" style="background:#334155">แผนหุ้นไทย</span>
+            <span class="fw-bold small">🇹🇭 SET Index</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%">
+            <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
+            {"symbols":[["SET Index","SET:SET|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"area","maLineColor":"#334155","maLineWidth":1,"maLength":20,"dateRanges":["1m|30","3m|60","12m|1D","all|1M"]}
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIX -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#fef2f2;border-bottom:2px solid #ef4444">
+            <span class="badge rounded-pill" style="background:#ef4444">ความผันผวน</span>
+            <span class="fw-bold small">🚨 VIX Index</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%">
+            <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
+            {"symbols":[["VIX Index","CBOE:VIX|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"area","maLineColor":"#ef4444","maLineWidth":1,"maLength":20,"dateRanges":["1d|1","1m|30","3m|60","12m|1D","all|1M"]}
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- US 10Y Yield -->
+      <div class="col-md-4">
+        <div class="rounded-3 border overflow-hidden" style="height:320px">
+          <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#f0f9ff;border-bottom:2px solid #0284c7">
+            <span class="badge rounded-pill" style="background:#0284c7">แผนตราสารหนี้ต่างประเทศ</span>
+            <span class="fw-bold small">📄 US 10Y Yield</span>
+          </div>
+          <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%">
+            <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
+            {"symbols":[["US 10Y Yield","TVC:US10Y|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"area","maLineColor":"#0284c7","maLineWidth":1,"maLength":20,"dateRanges":["1m|30","3m|60","12m|1D","all|1M"]}
+            </script>
+          </div>
+        </div>
+      </div>
+
       <!-- ทองคำ -->
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="rounded-3 border overflow-hidden" style="height:320px">
           <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#fffbf0;border-bottom:2px solid #f59e0b">
             <span class="badge rounded-pill" style="background:#f59e0b">แผนทองคำ กบข.</span>
             <span class="fw-bold small">🥇 ทองคำ (XAUUSD)</span>
-            <span class="ms-auto text-muted" style="font-size:.7rem">OANDA:XAUUSD</span>
           </div>
           <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%">
             <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
-            <div class="tradingview-widget-copyright"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
-            {"symbols":[["แผนทองคำ กบข. | XAUUSD","OANDA:XAUUSD|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"candlesticks","maLineColor":"#f59e0b","maLineWidth":1,"maLength":20,"dateRanges":["1d|1","1m|30","3m|60","12m|1D","all|1M"]}
+            {"symbols":[["ทองคำ","OANDA:XAUUSD|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"candlesticks","maLineColor":"#f59e0b","maLineWidth":1,"maLength":20,"dateRanges":["1d|1","1m|30","3m|60","12m|1D","all|1M"]}
             </script>
           </div>
         </div>
       </div>
 
       <!-- USD/THB -->
-      <div class="col-md-6">
+      <div class="col-md-4">
         <div class="rounded-3 border overflow-hidden" style="height:320px">
           <div class="px-3 py-2 d-flex align-items-center gap-2" style="background:#f0fdf4;border-bottom:2px solid #16a34a">
             <span class="badge rounded-pill" style="background:#16a34a">อัตราแลกเปลี่ยน</span>
             <span class="fw-bold small">🇹🇭 USD/THB</span>
-            <span class="ms-auto text-muted" style="font-size:.7rem">กระทบแผนหุ้นต่างประเทศ + ตราสารหนี้โลก</span>
           </div>
           <div class="tradingview-widget-container" style="height:calc(100% - 42px);width:100%">
             <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
-            <div class="tradingview-widget-copyright"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
-            {"symbols":[["USD/THB | กระทบแผนต่างประเทศ กบข.","OANDA:USDTHB|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"area","maLineColor":"#16a34a","maLineWidth":1,"maLength":20,"dateRanges":["1d|1","1m|30","3m|60","12m|1D","all|1M"]}
+            {"symbols":[["USD/THB","OANDA:USDTHB|1D"]],"chartOnly":false,"width":"100%","height":"100%","locale":"th","colorTheme":"light","autosize":true,"showVolume":false,"showMA":true,"hideDateRanges":false,"scalePosition":"right","scaleMode":"Normal","fontSize":"10","valuesTracking":"1","changeMode":"price-and-percent","chartType":"area","maLineColor":"#16a34a","maLineWidth":1,"maLength":20,"dateRanges":["1d|1","1m|30","3m|60","12m|1D","all|1M"]}
             </script>
           </div>
         </div>
@@ -2841,60 +2914,90 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
     <div class="row g-3">
 
       <!-- ทองคำ — OANDA:XAUUSD -->
-      <div class="col-md-4">
+      <div class="col-md-3 col-sm-6">
         <div class="rounded-3 border h-100 overflow-hidden">
           <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#fffbf0;border-bottom:2px solid #f59e0b">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge rounded-pill" style="background:#f59e0b">แผนทองคำ กบข.</span>
-              <span class="text-muted" style="font-size:.7rem">สินทรัพย์: ทองคำ 100%</span>
-            </div>
-            <div class="fw-bold small">🥇 ทองคำ (Gold Spot · XAUUSD)</div>
-            <div class="text-muted" style="font-size:.68rem">OANDA:XAUUSD · ราคาทองคำโลก USD/ออนซ์</div>
+            <div class="fw-bold small">🥇 กราฟทองคำ (XAUUSD)</div>
           </div>
           <div class="tradingview-widget-container p-1">
             <div class="tradingview-widget-container__widget"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
-            {"interval":"1D","width":"100%","isTransparent":true,"height":420,"symbol":"OANDA:XAUUSD","showIntervalTabs":true,"displayMode":"multiple","locale":"en","colorTheme":"light"}
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"OANDA:XAUUSD","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
             </script>
           </div>
         </div>
       </div>
 
-      <!-- S&P500 — FOREXCOM:SPXUSD — ตราสารทุนโลก พัฒนาแล้ว -->
-      <div class="col-md-4">
+      <!-- S&P500 -->
+      <div class="col-md-3 col-sm-6">
         <div class="rounded-3 border h-100 overflow-hidden">
           <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#eff6ff;border-bottom:2px solid #1d4ed8">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge rounded-pill" style="background:#1d4ed8">ตราสารทุนโลก (พัฒนาแล้ว)</span>
-              <span class="text-muted" style="font-size:.7rem">สัดส่วน: 65% ของหุ้นต่างประเทศ</span>
-            </div>
-            <div class="fw-bold small">🌍 S&P 500 Index (SP:SPX)</div>
-            <div class="text-muted" style="font-size:.68rem">SP:SPX · ดัชนีหุ้นสหรัฐ 500 บริษัทใหญ่</div>
+            <div class="fw-bold small">🌍 S&P 500 Index</div>
           </div>
           <div class="tradingview-widget-container p-1">
             <div class="tradingview-widget-container__widget"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
-            {"interval":"1D","width":"100%","isTransparent":true,"height":420,"symbol":"SP:SPX","showIntervalTabs":true,"displayMode":"multiple","locale":"en","colorTheme":"light"}
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"SP:SPX","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
+            </script>
+          </div>
+        </div>
+      </div>
+      
+      <!-- SET Index -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#f8fafc;border-bottom:2px solid #334155">
+            <div class="fw-bold small">🇹🇭 SET Index</div>
+          </div>
+          <div class="tradingview-widget-container p-1">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"SET:SET","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
             </script>
           </div>
         </div>
       </div>
 
-      <!-- USD/THB — OANDA:USDTHB — อัตราแลกเปลี่ยน -->
-      <div class="col-md-4">
+      <!-- USD/THB -->
+      <div class="col-md-3 col-sm-6">
         <div class="rounded-3 border h-100 overflow-hidden">
           <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#f0fdf4;border-bottom:2px solid #16a34a">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge rounded-pill" style="background:#16a34a">อัตราแลกเปลี่ยน</span>
-              <span class="text-muted" style="font-size:.7rem">กระทบแผนต่างประเทศทุกแผน</span>
-            </div>
             <div class="fw-bold small">🇹🇭 USD / THB</div>
-            <div class="text-muted" style="font-size:.68rem">OANDA:USDTHB · บาทอ่อน → ผลตอบแทนต่างประเทศ (THB) ↑</div>
           </div>
           <div class="tradingview-widget-container p-1">
             <div class="tradingview-widget-container__widget"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
-            {"interval":"1D","width":"100%","isTransparent":true,"height":420,"symbol":"OANDA:USDTHB","showIntervalTabs":true,"displayMode":"multiple","locale":"en","colorTheme":"light"}
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"OANDA:USDTHB","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
+            </script>
+          </div>
+        </div>
+      </div>
+      
+      <!-- US 10Y Yield -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#f0f9ff;border-bottom:2px solid #0284c7">
+            <div class="fw-bold small">📄 US 10Y Yield</div>
+          </div>
+          <div class="tradingview-widget-container p-1">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"TVC:US10Y","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
+            </script>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TH 10Y Yield -->
+      <div class="col-md-3 col-sm-6">
+        <div class="rounded-3 border h-100 overflow-hidden">
+          <div class="px-3 py-2 d-flex flex-column gap-1" style="background:#faf5ff;border-bottom:2px solid #9333ea">
+            <div class="fw-bold small">📄 Thai 10Y Yield</div>
+          </div>
+          <div class="tradingview-widget-container p-1">
+            <div class="tradingview-widget-container__widget"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js" async>
+            {"interval":"1D","width":"100%","isTransparent":true,"height":350,"symbol":"TVC:TH10Y","showIntervalTabs":true,"displayMode":"multiple","locale":"th","colorTheme":"light"}
             </script>
           </div>
         </div>
@@ -2904,25 +3007,22 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
 
     <!-- คำอธิบายการเชื่อมโยงสินทรัพย์ กบข. กับสัญญาณ -->
     <div class="mt-3 p-3 rounded-3" style="background:#f8faff;border:1px solid #dbeafe">
-      <p class="fw-bold small mb-2 text-primary"><i class="bi bi-link-45deg"></i> ความสัมพันธ์ของสัญญาณกับสินทรัพย์ใน กบข.</p>
+      <p class="fw-bold small mb-2 text-primary"><i class="bi bi-link-45deg"></i> ความสัมพันธ์ของสัญญาณกับสินทรัพย์ใน กบข. (อ้างอิงหลักการทฤษฎี Elliott Wave และปัจจัยทางเศรษฐกิจ)</p>
       <div class="row g-2">
-        <div class="col-md-4">
-          <div class="d-flex align-items-start gap-2">
-            <span class="badge mt-1 flex-shrink-0" style="background:#f59e0b">ทองคำ</span>
-            <span class="small text-muted">XAUUSD <strong>Strong Buy</strong> = แผนทองคำ กบข. มีแนวโน้มดี | ราคาทองขึ้น → NAV แผนทองคำเพิ่ม</span>
-          </div>
+        <div class="col-md-6 text-sm">
+          <ul class="mb-0 small text-muted">
+            <li><span class="badge" style="background:#f59e0b">แผนทองคำ</span> : <strong>XAUUSD / GLD</strong> (Buy = แนวโน้มทองคำโลกเป็นขาขึ้น ส่งผลดีต่อแผนทองคำ)</li>
+            <li><span class="badge" style="background:#1d4ed8">แผนหุ้นต่างประเทศ</span> : <strong>S&P 500, Nasdaq, Dow Jones</strong> (Buy = หุ้นบริษัทใหญ่ในระดับโลกมีทิศทางเติบโตดี)</li>
+            <li><span class="badge" style="background:#334155">แผนหุ้นไทย</span> : <strong>SET, SET50</strong> (Buy = ตลาดหุ้นไทยแข็งแกร่ง มีโอกาสทำกำไรได้ดี)</li>
+            <li><span class="badge" style="background:#ef4444">แผนความเสี่ยงสูงต่างๆ</span> : <strong>VIX Index</strong> (ค่าสูง/เกิน 20 = ตลาดผันผวนหนัก นักลงทุนตื่นตระหนก ควรระวัง!)</li>
+          </ul>
         </div>
-        <div class="col-md-4">
-          <div class="d-flex align-items-start gap-2">
-            <span class="badge mt-1 flex-shrink-0" style="background:#1d4ed8">หุ้นต่างประเทศ</span>
-            <span class="small text-muted">SPXUSD <strong>Strong Buy</strong> = แผนหุ้นต่างประเทศ 95% และแผน Life Path มีแนวโน้มดี</span>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="d-flex align-items-start gap-2">
-            <span class="badge mt-1 flex-shrink-0" style="background:#16a34a">FX</span>
-            <span class="small text-muted">USD/THB <strong>ขึ้น</strong> (บาทอ่อน) → ผลตอบแทนแผนต่างประเทศเมื่อแปลงเป็นบาทสูงขึ้น แม้ตลาดไม่เปลี่ยน</span>
-          </div>
+        <div class="col-md-6 text-sm">
+          <ul class="mb-0 small text-muted">
+            <li><span class="badge" style="background:#16a34a">ค่าเงินบาท</span> : <strong>USD/THB</strong> (กราฟขึ้น = บาทอ่อน ส่งผลบวกต่อการแปลงมูลค่าแผนหุ้นและตราสารหนี้ต่างประเทศกลับมาเป็นบาท)</li>
+            <li><span class="badge" style="background:#0284c7">แผนตราสารหนี้ ตปท.</span> : <strong>US 10Y Yield</strong> (Sell/กราฟร่วง = ราคาพันธบัตรจะปรับตัวขึ้น ส่งผลดีต่อกองทุนตราสารหนี้)</li>
+            <li><span class="badge" style="background:#9333ea">แผนตราสารหนี้ไทย</span> : <strong>Thai 10Y Yield</strong> (Sell/กราฟร่วง = ราคาพันธบัตรไทยปรับตัวสูงขึ้น)</li>
+          </ul>
         </div>
       </div>
     </div>
