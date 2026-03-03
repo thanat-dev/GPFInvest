@@ -2714,7 +2714,7 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
       <span class="badge rounded-pill" style="background:#16a34a">🇹🇭 อัตราแลกเปลี่ยน (กระทบแผนต่างประเทศ)</span>
     </div>
 
-    <div class="tradingview-widget-container" style="height: 650px; width: 100%;">
+    <div class="tradingview-widget-container" style="height: 1000px; width: 100%;">
       <div class="tradingview-widget-container__widget" style="height: calc(100% - 32px); width: 100%;"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-quotes.js" async>
       {
