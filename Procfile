@@ -1,0 +1,1 @@
+web: gunicorn gpfinvest:app

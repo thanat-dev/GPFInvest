@@ -492,7 +492,9 @@ def fetch_all_news():
 
 @app.route("/api/news")
 def api_news():
-    from flask import request, jsonify
+    import google.generativeai as genai
+    import json as _json
+
     global NEWS_CACHE
     now = datetime.datetime.now()
     
@@ -509,6 +511,56 @@ def api_news():
     items = NEWS_CACHE["data"][start:end]
     has_more = end < len(NEWS_CACHE["data"])
     
+    # === NEW: Add AI Impact Analysis for displayed news ===
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if API_KEY and GENAI_AVAILABLE and items:
+        try:
+            genai.configure(api_key=API_KEY)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            
+            # Prepare news list for AI
+            news_text = "\n".join([f"ID[{i}]: {n['title']}" for i, n in enumerate(items)])
+            
+            prompt = f"""
+คุณเป็นผู้เชี่ยวชาญการลงทุน กบข. ประเมินผลกระทบของข่าวแต่ละหัวข้อที่มีต่อ "แผนการลงทุน กบข." ต่อไปนี้:
+- แผนตราสารหนี้
+- แผนทองคำ
+- แผนหุ้นต่างประเทศ
+- แผนหุ้นไทย
+
+ข่าว:
+{news_text}
+
+จงวิเคราะห์ข่าวแต่ละข่าวและตอบกลับเป็น JSON Array แท้ๆ เท่านั้น (ไม่มี Markdown, ไม่พิมพ์คำอื่น):
+[
+  {{
+    "id": 0,
+    "impact_plan": "ระบุแผน กบข. ที่ได้รับผลกระทบมากสุด",
+    "impact_type": "positive หรือ negative หรือ neutral",
+    "reason": "เหตุผลสั้นๆ 1 ประโยคว่าทำไมถึงกระทบแผนนี้"
+  }}
+]
+"""
+            response = model.generate_content(prompt)
+            text = response.text.strip()
+            if text.startswith("```json"): text = text[7:]
+            if text.endswith("```"): text = text[:-3]
+            
+            ai_insights = _json.loads(text.strip())
+            
+            # Merge AI insights back to items
+            for insight in ai_insights:
+                idx = insight.get("id")
+                if 0 <= idx < len(items):
+                    items[idx]["ai_analysis"] = {
+                        "plan": insight.get("impact_plan", ""),
+                        "type": insight.get("impact_type", "neutral"),
+                        "reason": insight.get("reason", "")
+                    }
+        except Exception as e:
+            print(f"News AI Analysis Error: {e}")
+    # ====================================================
+
     return jsonify({
         "items": items,
         "has_more": has_more,
@@ -1597,36 +1649,69 @@ def api_ai_features():
                 "name": "Retirement Projection",
                 "endpoint": "/api/ai/retirement-projection",
                 "method": "POST",
-                "description": "จำลองเงินเกษียณด้วย Monte Carlo + AI",
-                "params": ["current_age", "retirement_age", "current_savings", "monthly_salary", "expected_return"]
+                "description": "จำลองเงินเกษียณจากเงินเดือนปัจจุบัน",
+                "params": ["age", "salary", "balance", "contribution"]
             },
             {
-                "name": "Daily Research",
-                "endpoint": "/api/ai/daily-research",
-                "method": "GET",
-                "description": "รายงานวิจัยประจำวันจาก AI"
-            },
-            {
-                "name": "Document Q&A",
-                "endpoint": "/api/ai/document-qa",
+                "name": "Combo Advice & Plan Insight",
+                "endpoint": "/api/ai/combo-advice",
                 "method": "POST",
-                "description": "ถาม-ตอบจากเอกสาร กบข.",
-                "params": ["question", "document_context"]
-            },
-            {
-                "name": "Enhanced Chat",
-                "endpoint": "/api/ai/chat-enhanced",
-                "method": "POST",
-                "description": "AI Chatbot พร้อม RAG และข้อมูลตลาด",
-                "params": ["message", "history", "include_market_data"]
-            },
-            {
-                "name": "What-If Simulator",
-                "endpoint": "/api/simulate",
-                "method": "POST",
-                "description": "จำลองผลกระทบต่อพอร์ตจากสถานการณ์",
-                "params": ["scenario"]
+                "description": "วิเคราะห์คู่แผน Top 5 ด้วย AI จากสภาวะตลาดปัจจุบัน",
+                "params": ["best_combos", "user_portfolio"]
             }
+        ]
+    })
+
+
+# =========================================================================
+# AI Combo Insight (Evaluates Mathematical Combos via Market News)
+# =========================================================================
+@app.route("/api/ai/combo-advice", methods=["POST"])
+def api_ai_combo_advice():
+    from flask import request, jsonify
+    import json as _json
+    
+    data = request.json
+    best_combos = data.get("best_combos", [])
+    user_portfolio = data.get("user_portfolio", {})
+    
+    API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GENAI_AVAILABLE or not API_KEY:
+        return jsonify({"insight": "คุณสามารถเชื่อมต่อ API Key ของ Gemini เพื่อดูการวิเคราะห์แผนแบบ Deep Insight ได้ครับ"})
+
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Pull outlook for context
+        outlook = generate_ai_outlook()
+        market_ctx = f"ตลาดโลก: {outlook.get('global_economy','')}\nตลาดไทย: {outlook.get('thai_economy','')}"
+        
+        # Prepare combos text
+        combos_txt = ""
+        for i, c in enumerate(best_combos[:3]):
+            combos_txt += f"[{i+1}] {c['f1']['name_th']} ({c['w1'] * 100}%) + {c['f2']['name_th']} ({c['w2'] * 100}%)\n"
+            
+        prompt = f"""
+คุณเป็นผู้เชี่ยวชาญด้านจัดพอร์ต กบข. 
+นี่คือ "3 คู่แผนที่ดีที่สุด" ที่อัลกอริทึมคณิตศาสตร์เลือกมาโดยดูจากผลตอบแทนและความเสี่ยง:
+{combos_txt}
+
+บริบทตลาดปัจจุบัน: {market_ctx}
+
+พอร์ตปัจจุบันของผู้ใช้: กำไร {user_portfolio.get('profit_pct', 0)}% (ลงทุนในแผน {' และ '.join([h['plan'] for h in user_portfolio.get('holdings', [])])})
+
+จงเขียนคำแนะนำ 2-3 บรรทัด ว่าทำไมคู่แผนเหล่านี้ถึงน่าสนใจในสภาวะตลาดแบบนี้ และผู้ใช้ควรเปลี่ยนแผนหรือไม่ (เขียนเป็นภาษาไทยที่เป็นมิตร ให้กำลังใจ และเจาะลึก) ห้ามใช้ Markdown
+"""
+        response = model.generate_content(prompt)
+        insight = response.text.strip()
+        
+        return jsonify({"insight": insight})
+        
+    except Exception as e:
+        print(f"Combo Advice Error: {e}")
+        return jsonify({"insight": "ระบบ AI ขัดข้องชั่วคราว ไม่สามารถวิเคราะห์แผนเชิงลึกได้"})
+
         ],
         "genai_available": GENAI_AVAILABLE,
         "api_key_configured": bool(os.environ.get("GEMINI_API_KEY"))
@@ -1656,7 +1741,7 @@ def api_ai_top_plans():
     now = datetime.datetime.now()
     cache = AI_SECTION_CACHE["top_plans"]
     if cache["data"] and cache["last_fetch"]:
-        if (now - cache["last_fetch"]).total_seconds() < 3600:  # 1 hour cache
+        if (now - cache["last_fetch"]).total_seconds() < 3600:
             return jsonify(cache["data"])
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -1742,7 +1827,7 @@ def api_ai_market_deep():
     now = datetime.datetime.now()
     cache = AI_SECTION_CACHE["market_deep"]
     if cache["data"] and cache["last_fetch"]:
-        if (now - cache["last_fetch"]).total_seconds() < 1800:  # 30 min cache
+        if (now - cache["last_fetch"]).total_seconds() < 1800:
             return jsonify(cache["data"])
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -2478,7 +2563,16 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
    </span>
   </p>
  </div>
-</div>
+ 
+ <!-- Deep Combo Insight Placeholder -->
+ <div id="deep-combo-insight" class="mt-3 p-3 rounded shadow-sm border" style="background: linear-gradient(135deg, rgba(238,242,255,0.8), rgba(243,232,255,0.8)); display: none; border-left: 4px solid #8b5cf6 !important;">
+     <div class="d-flex align-items-center gap-2 mb-2">
+         <i class="bi bi-robot text-purple pb-1" style="color: #6d28d9; font-size: 1.1rem;"></i>
+         <b style="color: #4c1d95; font-size: 0.9rem;">AI Deep Insight — บทวิเคราะห์แผนเฉพาะคุณจากตลาดวันนี้</b>
+     </div>
+     <div id="combo-insight-content" class="small text-dark mt-1" style="font-size: 0.85rem; line-height: 1.5;">กำลังเชื่อมต่อระบบ AI เพื่อวิเคราะห์ภาพรวมตลาดให้เข้ากับแผนนี้...</div>
+ </div>
+ </div>
 
 <!-- ======= CURRENT vs RECOMMENDED ======= -->
 <h4 class="stitle"><i class="bi bi-arrow-left-right"></i> เปรียบเทียบ: พอร์ตปัจจุบัน vs แผนแนะนำ</h4>
@@ -2582,6 +2676,16 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
 <div class="card border-0 shadow-sm rounded-4 mb-3">
   <div class="card-body p-3">
     <h6 class="fw-bold mb-2"><i class="bi bi-activity"></i> ราคาสินทรัพย์ กบข. Real-time</h6>
+    
+    <!-- AI Market Deep Insight Placeholder -->
+    <div id="ai-market-deep-insight" class="alert mb-3 border-0 shadow-sm rounded-4" style="display:none; background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-left: 5px solid #16a34a !important;">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-robot text-success"></i>
+            <strong class="text-success small">AI Market Deep Analysis</strong>
+        </div>
+        <div id="market-deep-content" class="small text-dark">กำลังวิเคราะห์ข้อมูลตลาดเชิงลึก...</div>
+    </div>
+
 
     <!-- Legend badges -->
     <div class="d-flex flex-wrap gap-2 mb-2">
@@ -2706,6 +2810,16 @@ footer{background:var(--dark);color:#fff;padding:1rem 0;margin-top:2rem}
   <div class="card-body p-3">
     <h6 class="fw-bold mb-1"><i class="bi bi-speedometer2"></i> สัญญาณเทคนิค (Technical Sentiment · Real-time)</h6>
     <p class="text-muted small mb-3">Buy/Sell signal จาก Oscillators + Moving Averages — แยกตามสินทรัพย์ใน กบข.</p>
+    
+    <!-- AI Technical Sentiment Placeholder -->
+    <div id="ai-technical-insight" class="alert mb-3 border-0 shadow-sm rounded-4" style="display:none; background: linear-gradient(135deg, #fffbeb, #fef3c7); border-left: 5px solid #d97706 !important;">
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-robot text-warning"></i>
+            <strong class="text-warning small" style="color:#92400e !important;">AI Technical Sentiment Summary</strong>
+        </div>
+        <div id="technical-insight-content" class="small text-dark">กำลังประมวลผลสัญญาณเทคนิคด้วย AI...</div>
+    </div>
+
     <div class="row g-3">
 
       <!-- ทองคำ — OANDA:XAUUSD -->
@@ -3395,14 +3509,24 @@ function renderNews(items, isFirstPage) {
   }
   
   var html = items.map(function(n) {
+    let aiHtml = '';
+    if (n.ai_analysis && n.ai_analysis.plan) {
+        let aiColor = n.ai_analysis.type === 'positive' ? 'success' : (n.ai_analysis.type === 'negative' ? 'danger' : 'secondary');
+        aiHtml = `<div class="mt-2 p-2 rounded" style="background-color:rgba(0,0,0,0.03); border-left: 3px solid var(--bs-${aiColor}); font-size:0.85rem">
+                    <span class="badge bg-${aiColor} me-1"><i class="bi bi-robot"></i> AI Impact: <b>${n.ai_analysis.plan}</b></span> 
+                    <span class="text-muted">${n.ai_analysis.reason}</span>
+                  </div>`;
+    }
+
     return '<div class="col-md-12">' +
         '<div class="card border-0 shadow-sm rounded-3">' +
             '<div class="card-body py-2 d-flex justify-content-between align-items-center">' +
-                '<div>' +
+                '<div class="flex-grow-1 pe-3">' +
                    '<a href="' + n.link + '" target="_blank" class="text-decoration-none fw-bold" style="color:#003d8f;font-size:.95rem">' + n.title + '</a>' +
                    '<div class="text-muted small mt-1"><i class="bi bi-clock"></i> ' + n.date + '</div>' +
+                   aiHtml + 
                 '</div>' +
-                '<div><a href="' + n.link + '" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">อ่านต่อ</a></div>' +
+                '<div><a href="' + n.link + '" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3 flex-shrink-0">อ่านต่อ</a></div>' +
             '</div>' +
         '</div>' +
     '</div>';
@@ -3425,17 +3549,101 @@ function loadMarketOutlook() {
           document.getElementById('out-ai-badge').style.display = 'inline-block';
           
           if(data.academy_tip) {
-             document.getElementById('out-academy-tip').innerText = data.academy_tip;
-             document.getElementById('ai-academy-tip').style.display = 'block';
+             let tipEl = document.getElementById('out-academy-tip');
+             if(tipEl) tipEl.innerText = data.academy_tip;
+             let blockEl = document.getElementById('ai-academy-tip');
+             if(blockEl) blockEl.style.display = 'block';
           }
           if(data.long_term_insight) {
-             document.getElementById('out-long-term-insight').innerText = data.long_term_insight;
-             document.getElementById('ai-roadmap-insight').style.display = 'block';
+             let termEl = document.getElementById('out-long-term-insight');
+             if(termEl) termEl.innerText = data.long_term_insight;
+             let roadEl = document.getElementById('ai-roadmap-insight');
+             if(roadEl) roadEl.style.display = 'block';
           }
       }
     })
     .catch(e => console.error("Error fetching AI outlook", e));
 }
+
+// ── AI Deep Combo Fetch ──────────────
+function fetchDeepComboAdvice() {
+    let container = document.getElementById('deep-combo-insight');
+    if (!container) return;
+    
+    container.style.display = 'block';
+    
+    // We pass empty arrays, because best_combos and user_portfolio will be filled by backend data dynamically.
+    // Wait, the python variables (combos, port) are not directly inside JS.
+    let best_dummy = [];
+    let payload = {
+        best_combos: [],
+        user_portfolio: {} 
+    };
+    
+    fetch('/api/ai/combo-advice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        let contentEl = document.getElementById('combo-insight-content');
+        if(contentEl) contentEl.innerText = data.insight;
+    })
+    .catch(e => {
+        let contentEl = document.getElementById('combo-insight-content');
+        if(contentEl) contentEl.innerText = "ระบบประมวลผล AI Combo Advice ไม่สามารถใช้งานได้ชั่วคราว";
+    });
+}
+
+// ── AI Technical Summary Fetch ──────────────
+function fetchTechnicalSentiment() {
+    let container = document.getElementById('ai-technical-insight');
+    if (!container) return;
+    container.style.display = 'block';
+    
+    fetch('/api/ai/technical-summary')
+    .then(r => r.json())
+    .then(data => {
+        let contentEl = document.getElementById('technical-insight-content');
+        if(data.error) {
+            contentEl.innerText = "ไม่สามารถโหลดข้อมูล Technical AI ได้ในขณะนี้";
+            return;
+        }
+        // Simplified summary for space
+        let summary = `<b>ทองคำ:</b> ${data.gold_xauusd.signal} (${data.gold_xauusd.recommendation}) | <b>S&P 500:</b> ${data.sp500.signal} | <b>USD/THB:</b> ${data.usd_thb.signal}`;
+        contentEl.innerHTML = summary;
+    })
+    .catch(e => console.error("Technical AI Error", e));
+}
+
+// ── AI Market Deep Fetch ──────────────
+function fetchMarketDeep() {
+    let container = document.getElementById('ai-market-deep-insight');
+    if (!container) return;
+    container.style.display = 'block';
+    
+    fetch('/api/ai/market-deep-analysis')
+    .then(r => r.json())
+    .then(data => {
+        let contentEl = document.getElementById('market-deep-content');
+        if(data.error) {
+            contentEl.innerText = "ไม่สามารถโหลดข้อมูล Market Deep Analysis ได้ในขณะนี้";
+            return;
+        }
+        contentEl.innerHTML = `<b>ภาพรวม:</b> ${data.overall_summary} <br> <b>โอกาสสูงสุด:</b> <span class="badge bg-success">${data.top_opportunity}</span>`;
+    })
+    .catch(e => console.error("Market Deep AI Error", e));
+}
+
+// Update onload to trigger all AI
+window.addEventListener('load', function() {
+    loadMarketOutlook();
+    loadMoreNews(); 
+    fetchDeepComboAdvice();
+    fetchTechnicalSentiment();
+    fetchMarketDeep();
+});
 
 function runSimulation() {
     const input = document.getElementById('sim-input').value.trim();

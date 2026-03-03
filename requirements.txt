@@ -1,4 +1,9 @@
-Flask>=3.0.3
-yfinance>=1.0.0
-pandas>=2.2.0
-gunicorn>=22.0.0
+flask
+google-generativeai
+yfinance
+pandas
+python-dotenv
+feedparser
+beautifulsoup4
+requests
+gunicorn
