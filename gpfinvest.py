@@ -19,19 +19,25 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request, jsonify
 import datetime
 import itertools
 import urllib.request
 import xml.etree.ElementTree as ET
-import os
+import time as _time
 import json as _json
+import os
+
+# Google Gemini AI Integration (Free Tier: gemini-2.5-flash)
 try:
     import google.generativeai as genai
     GENAI_AVAILABLE = True
 except ImportError:
     genai = None
     GENAI_AVAILABLE = False
+
+# ชื่อ model ที่ใช้ — เปลี่ยนตรงนี้ที่เดียวถ้า Google อัปเดต
+GEMINI_MODEL = "gemini-2.5-flash"
 
 app = Flask(__name__)
 
@@ -440,8 +446,8 @@ def fetch_all_news():
     urls = [
         "https://www.kaohoon.com/feed",
         "https://mgronline.com/rss/stockmarket.xml",
-        "https://www.thansettakij.com/rss/finance",
-        "https://www.efinancethai.com/rss/rss_news.xml"
+        "https://www.bangkokbiznews.com/rss/finance",
+        "https://www.posttoday.com/rss/finance",
     ]
     news_items = []
     thirty_days_ago = datetime.datetime.now(timezone.utc) - timedelta(days=30)
@@ -506,9 +512,6 @@ def fetch_all_news():
 
 @app.route("/api/news")
 def api_news():
-    import google.generativeai as genai
-    import json as _json
-
     global NEWS_CACHE
     now = datetime.datetime.now()
     
@@ -530,7 +533,7 @@ def api_news():
     if API_KEY and GENAI_AVAILABLE and items:
         try:
             genai.configure(api_key=API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel(GEMINI_MODEL)
             
             # Prepare news list for AI
             news_text = "\n".join([f"ID[{i}]: {n['title']}" for i, n in enumerate(items)])
@@ -602,7 +605,7 @@ def generate_ai_outlook():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
         
         # Get latest news for context
         if not NEWS_CACHE["data"]:
@@ -708,7 +711,7 @@ def api_chat():
     if not GENAI_AVAILABLE:
         return jsonify({"reply": "ขออภัยครับ ฟีเจอร์ AI Chatbot จำเป็นต้องติดตั้ง google-generativeai ก่อนครับ (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์ AI Chatbot จำเป็นต้องเชื่อมต่อกับ API ก่อนครับ (กรุณาตั้งค่า GEMINI_API_KEY)"})
+        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์ AI Chatbot จำเป็นต้องเชื่อมต่อกับ API ก่อนครับ (กรุณาตั้งค่า GEMINI_API_KEY ในไฟล์ .env)"})
 
     try:
         genai.configure(api_key=API_KEY)
@@ -737,7 +740,7 @@ def api_chat():
 ถ้าผู้ใช้ขอคำแนะนำการลงทุน ให้สอดแทรกความรู้เรื่องวินัยการออมและการลงทุนระยะยาวเสมอ
 """
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name=GEMINI_MODEL,
             system_instruction=system_instruction
         )
         
@@ -759,13 +762,13 @@ def api_simulate():
     
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"error": "google-generativeai not installed"})
+        return jsonify({"error": "google-generativeai not installed (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"error": "No API Key"})
+        return jsonify({"error": "No GEMINI_API_KEY set in .env"})
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
         
         prompt = f"""
 วิเคราะห์สถานการณ์สมมติทางเศรษฐกิจต่อไปนี้: "{scenario}"
@@ -904,7 +907,7 @@ def api_admin_update_funds():
     
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE or not API_KEY:
-        return jsonify({"error": "Google Generative AI not available or API Key missing"})
+        return jsonify({"error": "AI not available or GEMINI_API_KEY missing"})
 
     if 'factsheet' not in request.files:
         return jsonify({"error": "No file uploaded. Please provide a GPF Factsheet PDF."})
@@ -915,7 +918,7 @@ def api_admin_update_funds():
         
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
         
         # Save temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
@@ -980,13 +983,13 @@ def api_portfolio_advice():
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"error": "google-generativeai not installed"})
+        return jsonify({"error": "google-generativeai not installed (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"error": "No API Key"})
+        return jsonify({"error": "No GEMINI_API_KEY set in .env"})
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         # Get current fund data for context
         fund_summary = "\n".join([
@@ -1060,7 +1063,7 @@ def api_rebalance_check():
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"error": "google-generativeai not installed"})
+        return jsonify({"error": "google-generativeai not installed (pip install google-generativeai)"})
     if not API_KEY:
         # Return rule-based analysis without AI
         alerts = []
@@ -1085,7 +1088,7 @@ def api_rebalance_check():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         allocation_str = "\n".join([
             f"- {h['plan']}: {h['pct']}% (มูลค่า {h.get('value', 0):,.2f} บาท)"
@@ -1164,13 +1167,13 @@ def api_scenario_analysis():
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"error": "google-generativeai not installed"})
+        return jsonify({"error": "google-generativeai not installed (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"error": "No API Key"})
+        return jsonify({"error": "No GEMINI_API_KEY set in .env"})
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         holdings_str = "\n".join([
             f"- {h['plan']}: {h['pct']}%"
@@ -1316,7 +1319,7 @@ def api_retirement_projection():
     if GENAI_AVAILABLE and API_KEY:
         try:
             genai.configure(api_key=API_KEY)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel(GEMINI_MODEL)
 
             prompt = f"""
 วิเคราะห์ผลการจำลองเงินเกษียณ กบข. และให้คำแนะนำ
@@ -1398,9 +1401,9 @@ def api_daily_research():
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"error": "google-generativeai not installed"})
+        return jsonify({"error": "google-generativeai not installed (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"error": "No API Key"})
+        return jsonify({"error": "No GEMINI_API_KEY set in .env"})
 
     try:
         # Get latest news
@@ -1409,7 +1412,7 @@ def api_daily_research():
         news_titles = "\n".join([f"- {n['title']} ({n['date']})" for n in recent_news])
 
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         prompt = f"""
 คุณเป็นนักวิเคราะห์การลงทุนของ กบข. สร้างรายงานวิจัยประจำวันจากข่าวล่าสุด
@@ -1481,13 +1484,13 @@ def api_document_qa():
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"error": "google-generativeai not installed"})
+        return jsonify({"error": "google-generativeai not installed (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"error": "No API Key"})
+        return jsonify({"error": "No GEMINI_API_KEY set in .env"})
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         # Get relevant knowledge from RAG
         knowledge = get_relevant_knowledge(question)
@@ -1542,9 +1545,9 @@ def api_chat_enhanced():
 
     API_KEY = os.environ.get("GEMINI_API_KEY")
     if not GENAI_AVAILABLE:
-        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์นี้ต้องติดตั้ง google-generativeai ก่อน"})
+        return jsonify({"reply": "ขออภัยครับ ฟีเจอร์นี้ต้องติดตั้ง google-generativeai ก่อน (pip install google-generativeai)"})
     if not API_KEY:
-        return jsonify({"reply": "ขออภัยครับ กรุณาตั้งค่า GEMINI_API_KEY"})
+        return jsonify({"reply": "ขออภัยครับ กรุณาตั้งค่า GEMINI_API_KEY ในไฟล์ .env"})
 
     try:
         genai.configure(api_key=API_KEY)
@@ -1600,7 +1603,7 @@ def api_chat_enhanced():
 - เตือนเรื่องความเสี่ยงเมื่อเหมาะสม
 """
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name=GEMINI_MODEL,
             system_instruction=system_instruction
         )
 
@@ -1695,7 +1698,7 @@ def api_ai_combo_advice():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
         
         # Pull outlook for context
         outlook = generate_ai_outlook()
@@ -1765,7 +1768,7 @@ def api_ai_top_plans():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         # Get news for context
         if not NEWS_CACHE["data"]:
@@ -1847,7 +1850,7 @@ def api_ai_market_deep():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
@@ -1941,7 +1944,7 @@ def api_ai_technical_summary():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         prompt = """คุณเป็นนักวิเคราะห์ทางเทคนิค ให้สรุปสัญญาณเทคนิคสำหรับสินทรัพย์หลักที่เกี่ยวข้องกับ กบข.
 
@@ -2022,7 +2025,7 @@ def api_ai_news_impact():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
@@ -2109,7 +2112,7 @@ def api_ai_academy_insight():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()
@@ -2193,7 +2196,7 @@ def api_ai_roadmap_insight():
 
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(GEMINI_MODEL)
 
         if not NEWS_CACHE["data"]:
             NEWS_CACHE["data"] = fetch_all_news()

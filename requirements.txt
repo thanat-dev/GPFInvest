@@ -1,7 +1,5 @@
 flask
 google-generativeai
-yfinance
-pandas
 python-dotenv
 feedparser
 beautifulsoup4
